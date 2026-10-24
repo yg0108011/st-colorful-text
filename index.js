@@ -80,7 +80,12 @@ function syncCategoryUI(catKey) {
         row.style.display = 'none';
     });
     if (cfg.mode === 'solid') card.querySelector('.sct-solid-row').style.display = 'flex';
-    if (cfg.mode === 'gradient') card.querySelector('.sct-gradient-row').style.display = 'block';
+    if (cfg.mode === 'gradient') {
+        card.querySelector('.sct-gradient-row').style.display = 'flex';
+        card.querySelector('.sct-cycle').value = cfg.cycle;
+        card.querySelector('.sct-cycle-length').value = cfg.cycleLength;
+        card.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
+    }
     renderStopPickers(catKey);
 }
 
@@ -107,13 +112,24 @@ function buildCategoryUI() {
             </div>
             <div class="sct-gradient-row" data-cat="${catKey}">
                 <div class="sct-gradient-head">
-                    <span>渐变颜色（2–4 色 · 每 30 字循环一次）</span>
+                    <span>渐变颜色（2–4 色）</span>
                     <button type="button" class="sct-add-stop menu_button_icon" data-cat="${catKey}" title="添加一个颜色">
                         <i class="fa-solid fa-plus"></i>
                     </button>
                 </div>
                 <div class="sct-stops" data-cat="${catKey}"></div>
                 <div class="sct-gradient-preview" data-cat="${catKey}"></div>
+                <label class="sct-cycle-row">
+                    <span>循环方式</span>
+                    <select class="sct-cycle text_pole" data-cat="${catKey}">
+                        <option value="length">字符长度循环</option>
+                        <option value="paragraph">整段话循环</option>
+                    </select>
+                </label>
+                <label class="sct-cycle-length-row">
+                    <span>循环字符数</span>
+                    <input type="number" class="sct-cycle-length" data-cat="${catKey}" min="2" max="999" step="1" />
+                </label>
             </div>`;
         list.append(card);
     });
@@ -149,6 +165,27 @@ function bindUI() {
         input.addEventListener('input', () => {
             const catKey = input.dataset.cat;
             Engine.getSettings().categories[catKey].solid = input.value;
+            saveSettings();
+            refreshAll();
+        });
+    });
+
+    document.querySelectorAll('.sct-cycle').forEach((select) => {
+        select.addEventListener('change', () => {
+            const catKey = select.dataset.cat;
+            Engine.getSettings().categories[catKey].cycle = select.value;
+            saveSettings();
+            syncCategoryUI(catKey);
+            refreshAll();
+        });
+    });
+
+    document.querySelectorAll('.sct-cycle-length').forEach((input) => {
+        input.addEventListener('input', () => {
+            const catKey = input.dataset.cat;
+            const cfg = Engine.getSettings().categories[catKey];
+            const n = Number.parseInt(input.value, 10);
+            cfg.cycleLength = Number.isFinite(n) && n >= 2 && n <= 999 ? n : 2;
             saveSettings();
             refreshAll();
         });
@@ -267,7 +304,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变模式下每 30 个字符完成一次静态循环渐变；跟随主题即使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话循环；跟随主题即使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
