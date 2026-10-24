@@ -1,0 +1,35 @@
+<div class="sct-settings-block">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b><i class="fa-solid fa-palette"></i> 多彩文本 Colorful Text</b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <label class="checkbox_label sct-enable-row">
+                <input type="checkbox" id="sct-enabled" />
+                <span>启用多彩文本</span>
+            </label>
+
+            <div id="sct-category-list"></div>
+
+            <div class="sct-preview-box">
+                <div class="sct-preview-title"><i class="fa-solid fa-eye"></i> 实时预览</div>
+                <div id="sct-preview">
+                    <p>这是主要文本示例：普通叙述与描写都会以主要文本配色呈现，长段落中渐变会每 30 个字完成一次循环。</p>
+                    <p><i>这是斜体文本示例，常用于内心独白、动作描写与补充说明。</i></p>
+                    <p><u>这是下划线文本示例，用于需要强调的词句。</u></p>
+                    <blockquote>这是引用文本示例：Markdown 引用块会使用引用配色。</blockquote>
+                    <p><q>“这是双引号内的对话内容，同样归入引用文本配色。”</q></p>
+                </div>
+            </div>
+
+            <div class="sct-actions">
+                <button type="button" class="menu_button" id="sct-apply"><i class="fa-solid fa-rotate"></i> 应用到当前聊天</button>
+                <button type="button" class="menu_button" id="sct-reset"><i class="fa-solid fa-rotate-left"></i> 恢复默认颜色</button>
+            </div>
+            <div class="sct-note">
+                渐变模式为静态循环渐变：每 30 个字符完成一次颜色循环，整段文字均由渐变色覆盖；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。
+            </div>
+        </div>
+    </div>
+</div>

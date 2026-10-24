@@ -1,0 +1,15 @@
+{
+    "display_name": "多彩文本 Colorful Text",
+    "loading_order": 30,
+    "requires": [],
+    "optional": [],
+    "dependencies": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "",
+    "version": "1.0.0",
+    "description": "自定义主要 / 斜体 / 下划线 / 引用文本颜色，支持纯色、静态循环渐变（30 字一循环）与跟随酒馆主题。",
+    "homePage": "https://github.com/yg0108011/st-colorful-text",
+    "auto_update": true,
+    "minimum_client_version": "1.12.0"
+}

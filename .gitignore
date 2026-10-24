@@ -1,0 +1,5 @@
+# 本地依赖与构建产物，不纳入仓库
+node_modules/
+.preview/
+test/syntax/
+test/mock.html

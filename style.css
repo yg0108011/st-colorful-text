@@ -1,0 +1,221 @@
+/* ==========================================================================
+   多彩文本 Colorful Text —— 面板样式
+   全部颜色取自酒馆主题变量；字号继承酒馆全局字号（--mainFontSize 由 body 控制），
+   不写死像素字号，确保面板 UI 大小随酒馆字体缩放与主题切换自动跟随。
+   ========================================================================== */
+
+.sct-settings-block {
+    color: var(--SmartThemeBodyColor);
+    font-size: inherit;
+    line-height: 1.5;
+}
+
+.sct-settings-block .inline-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 启用开关行 */
+.sct-enable-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--SmartThemeBodyColor);
+}
+
+/* 分类卡片 */
+.sct-card {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sct-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--SmartThemeBodyColor);
+}
+
+.sct-card-head i {
+    color: var(--SmartThemeQuoteColor);
+}
+
+/* 模式选择行 */
+.sct-mode-row,
+.sct-solid-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sct-mode-row > span,
+.sct-solid-row > span,
+.sct-gradient-head > span {
+    color: var(--SmartThemeEmColor);
+}
+
+.sct-mode-row select.sct-mode {
+    min-width: 10em;
+    flex: 0 1 auto;
+}
+
+/* 颜色选择器：跟随主题边框与配色 */
+.sct-settings-block input[type="color"] {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    width: 3em;
+    height: 1.9em;
+    padding: 0.15em;
+    cursor: pointer;
+}
+
+.sct-settings-block input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.sct-settings-block input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.sct-settings-block input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+/* 渐变区 */
+.sct-gradient-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sct-gradient-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.sct-stops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sct-stop-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sct-remove-stop {
+    color: var(--SmartThemeEmColor);
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.sct-remove-stop.disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.sct-add-stop {
+    color: var(--SmartThemeQuoteColor);
+    cursor: pointer;
+}
+
+/* 渐变预览条：渐变为主视觉，纯色不喧宾夺主 */
+.sct-gradient-preview {
+    height: 1.5em;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+}
+
+/* 实时预览框 */
+.sct-preview-box {
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sct-preview-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--SmartThemeEmColor);
+    font-weight: 600;
+}
+
+#sct-preview p {
+    margin: 0.35em 0;
+}
+
+#sct-preview blockquote {
+    border-left: 3px solid var(--SmartThemeQuoteColor);
+    padding-left: 10px;
+    background-color: var(--black30a, rgba(0, 0, 0, 0.3));
+    margin: 0.35em 0;
+}
+
+#sct-preview q::before,
+#sct-preview q::after {
+    content: none;
+}
+
+/* 操作按钮区 */
+.sct-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sct-actions .menu_button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 说明文字 */
+.sct-note {
+    color: var(--SmartThemeEmColor);
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+/* 染色字符：仅颜色变化，不产生任何布局偏移 */
+span.stfc-char {
+    display: inline;
+    white-space: inherit;
+}
+
+/* 窄屏（手机端）适配 */
+@media screen and (max-width: 720px) {
+    .sct-mode-row,
+    .sct-solid-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .sct-mode-row select.sct-mode {
+        width: 100%;
+    }
+}
