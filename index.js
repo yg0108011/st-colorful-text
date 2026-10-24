@@ -43,12 +43,29 @@ function renderStopPickers(catKey) {
     cfg.gradient.forEach((color, idx) => {
         const row = document.createElement('div');
         row.className = 'sct-stop-row';
+        const valid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color);
+        const hex = valid ? color.toLowerCase() : '#888888';
         const input = document.createElement('input');
         input.type = 'color';
         input.className = 'sct-gradient-stop';
         input.dataset.cat = catKey;
         input.dataset.idx = idx;
-        input.value = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : '#888888';
+        input.value = hex;
+        const hexInput = document.createElement('input');
+        hexInput.type = 'text';
+        hexInput.className = 'sct-hex sct-stop-hex';
+        hexInput.dataset.cat = catKey;
+        hexInput.dataset.idx = idx;
+        hexInput.value = hex;
+        hexInput.maxLength = 7;
+        hexInput.spellcheck = false;
+        hexInput.autocomplete = 'off';
+        bindColorPair(input, hexInput, (hexVal) => {
+            cfg.gradient[idx] = hexVal;
+            saveSettings();
+            updateGradientStrip(catKey);
+            refreshAll();
+        }, () => cfg.gradient[idx]);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'sct-remove-stop menu_button_icon';
@@ -57,7 +74,7 @@ function renderStopPickers(catKey) {
         remove.dataset.cat = catKey;
         remove.dataset.idx = idx;
         if (cfg.gradient.length <= 2) remove.classList.add('disabled');
-        row.append(input, remove);
+        row.append(input, hexInput, remove);
         box.append(row);
     });
     updateGradientStrip(catKey);
@@ -70,12 +87,62 @@ function updateGradientStrip(catKey) {
     strip.style.background = `linear-gradient(90deg, ${cfg.gradient.join(', ')})`;
 }
 
+const HEX_RE = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** 校验并归一化色号：接受 #RGB / #RRGGBB（可省略 #），返回小写 6 位色号；非法返回 null */
+function normalizeHex(raw) {
+    const m = HEX_RE.exec(String(raw || '').trim());
+    if (!m) return null;
+    let hex = '#' + m[1];
+    if (hex.length === 4) {
+        hex = '#' + [...hex.slice(1)].map((c) => c + c).join('');
+    }
+    return hex.toLowerCase();
+}
+
+/** 取色器与色号输入框双向同步；applyHex 写入设置并刷新，getCurrentHex 用于失焦还原 */
+function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
+    if (!picker || !hexInput) return;
+    picker.addEventListener('input', () => {
+        hexInput.value = picker.value;
+        hexInput.classList.remove('invalid');
+        applyHex(picker.value);
+    });
+    hexInput.addEventListener('input', () => {
+        const norm = normalizeHex(hexInput.value);
+        if (norm) {
+            hexInput.classList.remove('invalid');
+            picker.value = norm;
+            applyHex(norm);
+        } else {
+            hexInput.classList.add('invalid');
+        }
+    });
+    hexInput.addEventListener('blur', () => {
+        const norm = normalizeHex(hexInput.value);
+        if (norm) {
+            hexInput.value = norm;
+            picker.value = norm;
+            applyHex(norm);
+        } else {
+            const current = normalizeHex(getCurrentHex());
+            hexInput.value = current || getCurrentHex();
+            if (current) picker.value = current;
+            hexInput.classList.remove('invalid');
+        }
+    });
+}
+
 function syncCategoryUI(catKey) {
     const cfg = Engine.getSettings().categories[catKey];
     const card = document.querySelector(`.sct-card[data-cat="${catKey}"]`);
     if (!card) return;
     card.querySelector('.sct-mode').value = cfg.mode;
-    card.querySelector('.sct-solid').value = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid) ? cfg.solid : '#888888';
+    const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
+    const solidHex = solidOk ? cfg.solid.toLowerCase() : '#888888';
+    card.querySelector('.sct-solid').value = solidHex;
+    const solidHexInput = card.querySelector('.sct-solid-hex');
+    if (solidHexInput) solidHexInput.value = solidHex;
     card.querySelectorAll('.sct-solid-row, .sct-gradient-row').forEach((row) => {
         row.style.display = 'none';
     });
@@ -108,7 +175,10 @@ function buildCategoryUI() {
             </label>
             <div class="sct-solid-row" data-cat="${catKey}">
                 <span>纯色颜色</span>
-                <input type="color" class="sct-solid" data-cat="${catKey}" />
+                <div class="sct-color-control">
+                    <input type="color" class="sct-solid" data-cat="${catKey}" />
+                    <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
+                </div>
             </div>
             <div class="sct-gradient-row" data-cat="${catKey}">
                 <div class="sct-gradient-head">
@@ -161,13 +231,18 @@ function bindUI() {
         });
     });
 
-    document.querySelectorAll('.sct-solid').forEach((input) => {
-        input.addEventListener('input', () => {
-            const catKey = input.dataset.cat;
-            Engine.getSettings().categories[catKey].solid = input.value;
-            saveSettings();
-            refreshAll();
-        });
+    document.querySelectorAll('.sct-solid-row').forEach((row) => {
+        const catKey = row.dataset.cat;
+        bindColorPair(
+            row.querySelector('.sct-solid'),
+            row.querySelector('.sct-solid-hex'),
+            (hexVal) => {
+                Engine.getSettings().categories[catKey].solid = hexVal;
+                saveSettings();
+                refreshAll();
+            },
+            () => Engine.getSettings().categories[catKey].solid,
+        );
     });
 
     document.querySelectorAll('.sct-cycle').forEach((select) => {
@@ -213,16 +288,6 @@ function bindUI() {
             renderStopPickers(catKey);
             refreshAll();
         }
-    });
-
-    document.getElementById('sct-category-list')?.addEventListener('input', (ev) => {
-        const input = ev.target.closest('.sct-gradient-stop');
-        if (!input) return;
-        const catKey = input.dataset.cat;
-        Engine.getSettings().categories[catKey].gradient[Number(input.dataset.idx)] = input.value;
-        saveSettings();
-        updateGradientStrip(catKey);
-        refreshAll();
     });
 
     document.getElementById('sct-apply')?.addEventListener('click', () => {
@@ -304,7 +369,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话 / 本句话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）；跟随主题即使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话 / 本句话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）；跟随主题即使用酒馆当前主题配色。颜色可取色器选择，也可手动填写色号（#RGB / #RRGGBB）。</div>
             </div>
         </div>
     </div>`;
