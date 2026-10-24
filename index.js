@@ -103,22 +103,28 @@ function normalizeHex(raw) {
 /** 取色器与色号输入框双向同步；applyHex 写入设置并刷新，getCurrentHex 用于失焦还原 */
 function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     if (!picker || !hexInput) return;
+    let applyTimer = null;
+    const scheduleApply = () => {
+        if (applyTimer) clearTimeout(applyTimer);
+        applyTimer = setTimeout(() => applyHex(picker.value), 200);
+    };
     picker.addEventListener('input', () => {
         hexInput.value = picker.value;
         hexInput.classList.remove('invalid');
-        applyHex(picker.value);
+        scheduleApply();
     });
     hexInput.addEventListener('input', () => {
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.classList.remove('invalid');
             picker.value = norm;
-            applyHex(norm);
+            scheduleApply();
         } else {
             hexInput.classList.add('invalid');
         }
     });
     hexInput.addEventListener('blur', () => {
+        if (applyTimer) { clearTimeout(applyTimer); applyTimer = null; }
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.value = norm;
@@ -206,6 +212,8 @@ function buildCategoryUI() {
 }
 
 function refreshAll() {
+    // 设置变更后清空指纹，全量重绘一次；日常观察器触发只处理新增/变化消息
+    Engine.clearSignatures(document);
     Engine.processAll(document);
     refreshPreview();
 }
@@ -291,6 +299,7 @@ function bindUI() {
     });
 
     document.getElementById('sct-apply')?.addEventListener('click', () => {
+        Engine.clearSignatures(document);
         Engine.processAll(document);
         if (typeof toastr !== 'undefined') toastr.success('多彩文本已应用到当前聊天');
     });
@@ -318,7 +327,16 @@ let debounceTimer = null;
 
 function scheduleProcess() {
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => Engine.processAll(document), 150);
+    debounceTimer = setTimeout(() => {
+        // 染色写入期间断开观察器，避免自身 DOM 改动触发二次回调
+        if (observer) observer.disconnect();
+        try {
+            Engine.processAll(document);
+        } finally {
+            const chatEl = document.getElementById('chat');
+            if (observer && chatEl) observer.observe(chatEl, { childList: true, subtree: true, characterData: true });
+        }
+    }, 250);
 }
 
 function setupEvents() {
