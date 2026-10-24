@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>多彩文本 Colorful Text —— 本地渲染预览</title>
+    <link rel="stylesheet" href="../st-colorful-text/style.css" />
+    <style>
+        :root {
+            --SmartThemeBodyColor: rgb(220, 220, 210);
+            --SmartThemeEmColor: rgb(145, 145, 145);
+            --SmartThemeUnderlineColor: rgb(188, 231, 207);
+            --SmartThemeQuoteColor: rgb(225, 138, 36);
+            --SmartThemeBlurTintColor: rgba(23, 23, 23, 1);
+            --SmartThemeChatTintColor: rgba(23, 23, 23, 1);
+            --SmartThemeBorderColor: rgba(120, 120, 120, 0.35);
+            --black10a: rgba(255, 255, 255, 0.05);
+            --black30a: rgba(0, 0, 0, 0.3);
+            --mainFontSize: 15px;
+        }
+        body {
+            margin: 0;
+            padding: 24px;
+            background: #151515;
+            color: var(--SmartThemeBodyColor);
+            font-family: "Noto Sans", system-ui, sans-serif;
+            font-size: var(--mainFontSize);
+            line-height: 1.7;
+        }
+        h1 { font-size: 1.2em; font-weight: 600; }
+        .scene {
+            border: 1px solid var(--SmartThemeBorderColor);
+            border-radius: 10px;
+            background: var(--SmartThemeChatTintColor);
+            padding: 16px 18px;
+            margin: 18px 0;
+        }
+        .scene-title { color: var(--SmartThemeQuoteColor); font-weight: 600; margin-bottom: 8px; }
+        .mes_text p { margin: 0.4em 0; }
+        .mes_text blockquote {
+            border-left: 3px solid var(--SmartThemeQuoteColor);
+            padding-left: 10px;
+            background-color: var(--black30a);
+            margin: 0.4em 0;
+        }
+        #report { margin-top: 24px; font-size: 0.9em; }
+        #report .ok { color: #7dd87d; }
+        #report .fail { color: #ff7b7b; }
+        .panel-demo { max-width: 560px; margin-top: 24px; }
+        .sct-theme-note { color: var(--SmartThemeEmColor); font-size: 0.85em; opacity: 0.85; }
+    </style>
+</head>
+<body>
+    <h1>多彩文本 Colorful Text · 本地渲染预览（无酒馆环境模拟）</h1>
+
+    <div id="chat">
+        <div class="scene"><div class="scene-title">场景一 · 全部跟随酒馆主题</div>
+            <div class="mes" id="scene-theme">
+                <div class="mes_text">
+                    <p>这是跟随酒馆主题的主要文本，长段落用来观察默认主题色是否保持不变，叙述与描写都会出现在这里。</p>
+                    <p><i>这是斜体文本，常用于内心独白、动作描写与补充说明。</i></p>
+                    <p><u>这是下划线文本，用于需要强调的词句。</u></p>
+                    <blockquote>这是 Markdown 引用块，跟随酒馆引用色。</blockquote>
+                    <p><q>“这是双引号内的对话内容，跟随酒馆引用色。”</q></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="scene"><div class="scene-title">场景二 · 主文本渐变 / 斜体纯色 / 下划线渐变 / 引用渐变</div>
+            <div class="mes" id="scene-mixed">
+                <div class="mes_text">
+                    <p>这是渐变模式下的主要文本，长段落每三十个字完成一次静态循环渐变，整段文字都由渐变色覆盖，不留纯色残留，叙述描写在渐变中自然流动。</p>
+                    <p><i>这是纯色斜体文本，单独使用固定颜色，用于内心独白与动作描写。</i></p>
+                    <p><u>这是渐变下划线文本，逐字符循环上色，用于需要强调的词句。</u></p>
+                    <blockquote>这是渐变引用块，逐字符循环上色，用于作者注释与背景补充说明。</blockquote>
+                    <p><q>“这是渐变对话内容，双引号内的台词同样按引用渐变循环上色。”</q></p>
+                    <p>普通叙述中夹杂一句 "英文双引号对话也会归入引用渐变配色"，随后继续主要文本的渐变叙述。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="scene"><div class="scene-title">场景三 · 全部纯色自定义</div>
+            <div class="mes" id="scene-solid">
+                <div class="mes_text">
+                    <p>这是纯色主要文本，使用固定的自定义颜色，长段落保持统一色调，叙述与描写都在纯色范围内呈现。</p>
+                    <p><i>这是纯色斜体文本，固定颜色，用于内心独白与动作描写。</i></p>
+                    <p><u>这是纯色下划线文本，固定颜色，用于需要强调的词句。</u></p>
+                    <blockquote>这是纯色引用块，固定颜色，用于作者注释。</blockquote>
+                    <p><q>“这是纯色对话内容，双引号内台词使用引用纯色。”</q></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-demo sct-settings-block">
+        <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+                <b><i class="fa-solid fa-palette"></i> 多彩文本 Colorful Text（面板样式演示）</b>
+                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            </div>
+            <div class="inline-drawer-content">
+                <label class="checkbox_label sct-enable-row">
+                    <input type="checkbox" checked />
+                    <span>启用多彩文本</span>
+                </label>
+                <div id="panel-cards"></div>
+                <div class="sct-preview-box">
+                    <div class="sct-preview-title"><i class="fa-solid fa-eye"></i> 实时预览</div>
+                    <div id="sct-preview">
+                        <p>这是主要文本示例：普通叙述与描写都会以主要文本配色呈现。</p>
+                        <p><i>这是斜体文本示例，常用于内心独白、动作描写。</i></p>
+                        <p><u>这是下划线文本示例，用于需要强调的词句。</u></p>
+                        <blockquote>这是引用文本示例：Markdown 引用块会使用引用配色。</blockquote>
+                        <p><q>“这是双引号内的对话内容，同样归入引用文本配色。”</q></p>
+                    </div>
+                </div>
+                <div class="sct-actions">
+                    <button type="button" class="menu_button"><i class="fa-solid fa-rotate"></i> 应用到当前聊天</button>
+                    <button type="button" class="menu_button"><i class="fa-solid fa-rotate-left"></i> 恢复默认颜色</button>
+                </div>
+                <div class="sct-note">渐变模式为静态循环渐变：每 30 个字符完成一次颜色循环，整段文字均由渐变色覆盖。</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="report"></div>
+
+    <script>
+/*__ENGINE__*/
+    </script>
+    <script>
+        const report = [];
+        function check(name, ok, detail) { report.push({ name, ok, detail: detail || '' }); }
+        function applyMixedConfig() {
+            resetSettings();
+            const c = getSettings().categories;
+            c.main.mode = 'gradient'; c.main.gradient = ['#ff9ec7', '#b388ff', '#7ec8ff'];
+            c.italic.mode = 'solid'; c.italic.solid = '#a8c0ff';
+            c.underline.mode = 'gradient'; c.underline.gradient = ['#84fab0', '#8fd3f4'];
+            c.quote.mode = 'gradient'; c.quote.gradient = ['#f6d365', '#fda085'];
+            return c;
+        }
+
+        // 场景一：全部跟随主题
+        resetSettings();
+        processAll(document);
+        const themeText = document.querySelector('#scene-theme .mes_text');
+        check('主题模式：无染色包裹', themeText.querySelectorAll('span.stfc-char').length === 0);
+
+        // 场景二：混合模式
+        applyMixedConfig();
+        const mixed = document.querySelector('#scene-mixed .mes_text');
+        applyToRoot(mixed);
+        const mainSpans = mixed.querySelectorAll('span[data-stfc-cat="main"]');
+        const quoteSpans = mixed.querySelectorAll('span[data-stfc-cat="quote"]');
+        const italicEl = mixed.querySelector('i');
+        check('混合模式：主要文本渐变逐字符覆盖', mainSpans.length >= 30, 'main spans=' + mainSpans.length);
+        check('混合模式：引用渐变覆盖 q/blockquote/普通双引号', quoteSpans.length >= 4, 'quote spans=' + quoteSpans.length);
+        check('混合模式：斜体为纯色', italicEl.style.color === 'rgb(168, 192, 255)', 'color=' + italicEl.style.color);
+        const mainColors = new Set([...mainSpans].slice(0, 30).map((s) => s.style.color));
+        check('混合模式：30 字内颜色有渐变变化', mainColors.size >= 4, 'colors=' + mainColors.size);
+        check('混合模式：位置 0 与 30 同色（循环）', mainSpans[0] && mainSpans[30] && mainSpans[0].style.color === mainSpans[30].style.color);
+
+        // 场景三：全部纯色
+        resetSettings();
+        const solidCats = getSettings().categories;
+        solidCats.main.mode = 'solid'; solidCats.main.solid = '#e8c07d';
+        solidCats.italic.mode = 'solid'; solidCats.italic.solid = '#9fd8b0';
+        solidCats.underline.mode = 'solid'; solidCats.underline.solid = '#93c5fd';
+        solidCats.quote.mode = 'solid'; solidCats.quote.solid = '#f0a3a3';
+        const solid = document.querySelector('#scene-solid .mes_text');
+        applyToRoot(solid);
+        check('纯色模式：主要文本纯色', solid.style.color === 'rgb(232, 192, 125)', 'color=' + solid.style.color);
+        check('纯色模式：引用块纯色', solid.querySelector('blockquote').style.color === 'rgb(240, 163, 163)', 'color=' + solid.querySelector('blockquote').style.color);
+
+        // 幂等性：回到混合配置，重复应用两次
+        applyMixedConfig();
+        applyToRoot(mixed);
+        const before = mixed.querySelectorAll('span.stfc-char').length;
+        applyToRoot(mixed);
+        applyToRoot(mixed);
+        const after = mixed.querySelectorAll('span.stfc-char').length;
+        check('幂等性：重复应用包裹数量不变', before === after, before + ' -> ' + after);
+        check('幂等性：无嵌套包裹', mixed.querySelectorAll('span.stfc-char span.stfc-char').length === 0);
+
+        // 面板演示卡片（默认主题模式展示，不显示纯色/渐变控件）
+        resetSettings();
+        const panel = document.getElementById('panel-cards');
+        Object.entries(CATEGORY_META).forEach(([key, meta]) => {
+            const card = document.createElement('div');
+            card.className = 'sct-card';
+            card.innerHTML =
+                '<div class="sct-card-head"><i class="' + meta.icon + '"></i><span>' + meta.label + '</span></div>' +
+                '<label class="sct-mode-row"><span>配色模式</span>' +
+                '<select class="sct-mode text_pole"><option>跟随酒馆主题</option><option>纯色</option><option>渐变</option></select></label>' +
+                '<div class="sct-theme-note">当前跟随酒馆主题配色，切换为纯色或渐变后在此显示对应控件。</div>';
+            panel.append(card);
+        });
+        applyToRoot(document.getElementById('sct-preview'));
+
+        const reportEl = document.getElementById('report');
+        report.forEach((r) => {
+            const div = document.createElement('div');
+            div.className = r.ok ? 'ok' : 'fail';
+            div.textContent = (r.ok ? '✔' : '✘') + ' ' + r.name + (r.detail ? '（' + r.detail + '）' : '');
+            reportEl.append(div);
+        });
+    </script>
+</body>
+</html>
