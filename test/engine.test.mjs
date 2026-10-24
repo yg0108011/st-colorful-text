@@ -1,6 +1,7 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
  * 覆盖：主题/纯色/渐变三模式、字符长度/整段话两种循环、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
+ * 整段话循环边界：主要文本按自然段（<p>），斜体/下划线/引用按本元素（本句话）。
  */
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
@@ -193,6 +194,73 @@ test('整段话循环：每个段落独立走完色标，段首同色、段尾�
     assert.equal(first[first.length - 1].style.color, 'rgb(0, 0, 255)');
     assert.equal(second[0].style.color, 'rgb(255, 0, 0)');
     assert.equal(second[second.length - 1].style.color, 'rgb(0, 0, 255)');
+});
+
+test('整段话循环：段内引号不打断主要文本梯度，段首红、段尾蓝，引号后继续过渡', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
+      <div class="mes"><div class="mes_text">
+        <p>开头叙述“对话内容在这里”结尾叙述收尾。</p>
+      </div></div>
+    </div></body></html>`, { runScripts: 'outside-only' });
+    global.document = dom.window.document;
+    global.NodeFilter = dom.window.NodeFilter;
+    global.Node = dom.window.Node;
+    engine = await import('../st-colorful-text/engine.js');
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
+    engine.getSettings().categories.main.cycle = 'paragraph';
+    setMode('quote', 'theme');
+    engine.processAll(document);
+
+    const mainSpans = [...document.querySelectorAll('span[data-stfc-cat="main"]')];
+    assert.ok(mainSpans.length > 5, `主要文本应被逐字符包裹，实际 ${mainSpans.length}`);
+    assert.equal(mainSpans[0].style.color, 'rgb(255, 0, 0)');
+    assert.equal(mainSpans[mainSpans.length - 1].style.color, 'rgb(0, 0, 255)');
+    // 引号后的第一个主要字符不是红色（梯度没有在引号处重置）
+    assert.notEqual(mainSpans[4].style.color, 'rgb(255, 0, 0)');
+});
+
+test('整段话循环：斜体元素跨文本节点连续渐变，不按节点重置', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
+      <div class="mes"><div class="mes_text">
+        <p><i>斜体开头<b>加粗不染色</b>斜体结尾</i></p>
+      </div></div>
+    </div></body></html>`, { runScripts: 'outside-only' });
+    global.document = dom.window.document;
+    global.NodeFilter = dom.window.NodeFilter;
+    global.Node = dom.window.Node;
+    engine = await import('../st-colorful-text/engine.js');
+    engine.resetSettings();
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00']);
+    engine.getSettings().categories.italic.cycle = 'paragraph';
+    engine.processAll(document);
+
+    const italicSpans = [...document.querySelectorAll('span[data-stfc-cat="italic"]')];
+    assert.equal(italicSpans[0].style.color, 'rgb(0, 255, 0)');
+    assert.equal(italicSpans[italicSpans.length - 1].style.color, 'rgb(255, 255, 0)');
+    // 第二个文本节点的首字不是绿色（梯度延续到元素末尾）
+    assert.notEqual(italicSpans[4].style.color, 'rgb(0, 255, 0)');
+});
+
+test('整段话循环：下划线元素跨文本节点连续渐变', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
+      <div class="mes"><div class="mes_text">
+        <p><u>下划线开头<b>加粗不染色</b>下划线结尾</u></p>
+      </div></div>
+    </div></body></html>`, { runScripts: 'outside-only' });
+    global.document = dom.window.document;
+    global.NodeFilter = dom.window.NodeFilter;
+    global.Node = dom.window.Node;
+    engine = await import('../st-colorful-text/engine.js');
+    engine.resetSettings();
+    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff']);
+    engine.getSettings().categories.underline.cycle = 'paragraph';
+    engine.processAll(document);
+
+    const underlineSpans = [...document.querySelectorAll('span[data-stfc-cat="underline"]')];
+    assert.equal(underlineSpans[0].style.color, 'rgb(0, 0, 255)');
+    assert.equal(underlineSpans[underlineSpans.length - 1].style.color, 'rgb(255, 0, 255)');
+    assert.notEqual(underlineSpans[4].style.color, 'rgb(0, 0, 255)');
 });
 
 /* ---------------- 自定义字符长度循环 ---------------- */
