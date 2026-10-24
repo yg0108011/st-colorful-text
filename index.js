@@ -10,6 +10,9 @@ import * as Engine from './engine.js';
 const MODULE_NAME = Engine.MODULE_NAME;
 const extensionFolderPath = `scripts/extensions/third-party/${MODULE_NAME}`;
 
+/** 当前激活的分类标签 */
+let activeCat = 'main';
+
 /* -------------------------------------------------------------------------- */
 /* 设置持久化                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -140,78 +143,95 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-function syncCategoryUI(catKey) {
+/** 根据模式显示对应的设置行 */
+function showRowsByMode(panel, cfg) {
+    panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
+    panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
+}
+
+/** 渲染当前激活分类的设置面板（每次切 tab 或切模式时重建） */
+function renderPanel() {
+    const list = document.getElementById('sct-category-list');
+    if (!list) return;
+    list.querySelectorAll('.sct-tab').forEach((tab) => {
+        tab.classList.toggle('sct-active', tab.dataset.cat === activeCat);
+    });
+
+    const catKey = activeCat;
     const cfg = Engine.getSettings().categories[catKey];
-    const card = document.querySelector(`.sct-cat[data-cat="${catKey}"]`);
-    if (!card) return;
-    card.querySelector('.sct-mode').value = cfg.mode;
+    const panel = list.querySelector('.sct-tab-panel');
+    panel.innerHTML = `
+        <label class="sct-mode-row">
+            <span>配色模式</span>
+            <select class="sct-mode text_pole" data-cat="${catKey}">
+                <option value="theme">跟随酒馆主题</option>
+                <option value="solid">纯色</option>
+                <option value="gradient">渐变</option>
+            </select>
+        </label>
+        <div class="sct-solid-row" data-cat="${catKey}">
+            <span>纯色颜色</span>
+            <div class="sct-color-control">
+                <input type="color" class="sct-solid" data-cat="${catKey}" />
+                <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
+            </div>
+        </div>
+        <div class="sct-gradient-row" data-cat="${catKey}">
+            <div class="sct-gradient-head">
+                <span>渐变颜色（2–4 色）</span>
+                <button type="button" class="sct-add-stop menu_button_icon" data-cat="${catKey}" title="添加一个颜色">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+            <div class="sct-stops" data-cat="${catKey}"></div>
+            <div class="sct-gradient-preview" data-cat="${catKey}"></div>
+            <div class="sct-angle-row" data-cat="${catKey}">
+                <span class="sct-angle-label">渐变角度</span>
+                <input type="range" class="sct-angle" min="0" max="360" step="1" data-cat="${catKey}" />
+                <span class="sct-angle-deg" data-cat="${catKey}">${Engine.normalizeAngle(cfg.angle)}°</span>
+            </div>
+        </div>`;
+
+    panel.querySelector('.sct-mode').value = cfg.mode;
+    showRowsByMode(panel, cfg);
+
+    // 纯色取色器
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
     const solidHex = solidOk ? cfg.solid.toLowerCase() : '#888888';
-    card.querySelector('.sct-solid').value = solidHex;
-    const solidHexInput = card.querySelector('.sct-solid-hex');
-    if (solidHexInput) solidHexInput.value = solidHex;
-    card.querySelectorAll('.sct-solid-row, .sct-gradient-row').forEach((row) => {
-        row.style.display = 'none';
-    });
-    if (cfg.mode === 'solid') card.querySelector('.sct-solid-row').style.display = 'flex';
-    if (cfg.mode === 'gradient') {
-        card.querySelector('.sct-gradient-row').style.display = 'flex';
-        const angle = Engine.normalizeAngle(cfg.angle);
-        card.querySelector('.sct-angle').value = angle;
-        card.querySelector('.sct-angle-num').value = angle;
-    }
+    panel.querySelector('.sct-solid').value = solidHex;
+    panel.querySelector('.sct-solid-hex').value = solidHex;
+    bindColorPair(
+        panel.querySelector('.sct-solid'),
+        panel.querySelector('.sct-solid-hex'),
+        (hexVal) => {
+            cfg.solid = hexVal;
+            saveSettings();
+            refreshAll();
+        },
+        () => cfg.solid,
+    );
+
     renderStopPickers(catKey);
 }
 
 function buildCategoryUI() {
     const list = document.getElementById('sct-category-list');
     if (!list) return;
+    list.innerHTML = `<div class="sct-tabs"></div><div class="sct-tab-panel"></div>`;
+    const tabsBox = list.querySelector('.sct-tabs');
     Object.entries(Engine.CATEGORY_META).forEach(([catKey, meta]) => {
-        const card = document.createElement('div');
-        card.className = 'sct-cat';
-        card.dataset.cat = catKey;
-        card.innerHTML = `
-            <button type="button" class="sct-cat-bar" data-cat="${catKey}">
-                <i class="${meta.icon} sct-cat-icon"></i>
-                <span class="sct-cat-label">${meta.label}</span>
-                <i class="fa-solid fa-chevron-down sct-cat-caret"></i>
-            </button>
-            <div class="sct-cat-body" hidden>
-                <label class="sct-mode-row">
-                    <span>配色模式</span>
-                    <select class="sct-mode text_pole" data-cat="${catKey}">
-                        <option value="theme">跟随酒馆主题</option>
-                        <option value="solid">纯色</option>
-                        <option value="gradient">渐变</option>
-                    </select>
-                </label>
-                <div class="sct-solid-row" data-cat="${catKey}">
-                    <span>纯色颜色</span>
-                    <div class="sct-color-control">
-                        <input type="color" class="sct-solid" data-cat="${catKey}" />
-                        <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
-                    </div>
-                </div>
-                <div class="sct-gradient-row" data-cat="${catKey}">
-                    <div class="sct-gradient-head">
-                        <span>渐变颜色（2–4 色）</span>
-                        <button type="button" class="sct-add-stop menu_button_icon" data-cat="${catKey}" title="添加一个颜色">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
-                    </div>
-                    <div class="sct-stops" data-cat="${catKey}"></div>
-                    <div class="sct-gradient-preview" data-cat="${catKey}"></div>
-                    <div class="sct-angle-row">
-                        <span class="sct-angle-label">渐变角度</span>
-                        <input type="range" class="sct-angle" min="0" max="360" step="1" data-cat="${catKey}" />
-                        <span class="sct-angle-value">
-                            <input type="number" class="sct-angle-num" min="0" max="360" step="1" data-cat="${catKey}" />°
-                        </span>
-                    </div>
-                </div>
-            </div>`;
-        list.append(card);
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'sct-tab';
+        tab.dataset.cat = catKey;
+        tab.innerHTML = `<i class="${meta.icon}"></i><span>${meta.label}</span>`;
+        tab.addEventListener('click', () => {
+            activeCat = catKey;
+            renderPanel();
+        });
+        tabsBox.append(tab);
     });
+    renderPanel();
 }
 
 function refreshAll() {
@@ -225,9 +245,11 @@ function setAngle(catKey, rawValue) {
     const cfg = Engine.getSettings().categories[catKey];
     cfg.angle = Engine.normalizeAngle(rawValue);
     saveSettings();
-    // 同步面板上滑杆与数字框
-    document.querySelectorAll(`.sct-angle[data-cat="${catKey}"]`).forEach((el) => { el.value = cfg.angle; });
-    document.querySelectorAll(`.sct-angle-num[data-cat="${catKey}"]`).forEach((el) => { el.value = cfg.angle; });
+    const panel = document.querySelector(`.sct-angle-row[data-cat="${catKey}"]`);
+    if (panel) {
+        panel.querySelector('.sct-angle').value = cfg.angle;
+        panel.querySelector('.sct-angle-deg').textContent = `${cfg.angle}°`;
+    }
     updateGradientStrip(catKey);
     refreshAll();
 }
@@ -243,53 +265,28 @@ function bindUI() {
         });
     }
 
-    // 折叠条开合
-    document.querySelectorAll('.sct-cat-bar').forEach((bar) => {
-        bar.addEventListener('click', () => {
-            const cat = bar.closest('.sct-cat');
-            const body = cat.querySelector('.sct-cat-body');
-            const open = cat.classList.toggle('sct-open');
-            body.hidden = !open;
-        });
-    });
+    const list = document.getElementById('sct-category-list');
 
-    document.querySelectorAll('.sct-mode').forEach((select) => {
-        select.addEventListener('change', () => {
-            const catKey = select.dataset.cat;
-            Engine.getSettings().categories[catKey].mode = select.value;
+    // 配色模式切换（切模式后重建面板以显示/隐藏对应行）
+    list.addEventListener('change', (ev) => {
+        if (ev.target.classList.contains('sct-mode')) {
+            const catKey = ev.target.dataset.cat;
+            Engine.getSettings().categories[catKey].mode = ev.target.value;
             saveSettings();
-            syncCategoryUI(catKey);
+            renderPanel();
             refreshAll();
-        });
+        }
     });
 
-    document.querySelectorAll('.sct-solid-row').forEach((row) => {
-        const catKey = row.dataset.cat;
-        bindColorPair(
-            row.querySelector('.sct-solid'),
-            row.querySelector('.sct-solid-hex'),
-            (hexVal) => {
-                Engine.getSettings().categories[catKey].solid = hexVal;
-                saveSettings();
-                refreshAll();
-            },
-            () => Engine.getSettings().categories[catKey].solid,
-        );
+    // 角度滑杆
+    list.addEventListener('input', (ev) => {
+        if (ev.target.classList.contains('sct-angle')) {
+            setAngle(ev.target.dataset.cat, ev.target.value);
+        }
     });
 
-    // 角度滑杆与数字框联动
-    document.querySelectorAll('.sct-angle').forEach((slider) => {
-        slider.addEventListener('input', () => setAngle(slider.dataset.cat, slider.value));
-    });
-    document.querySelectorAll('.sct-angle-num').forEach((num) => {
-        num.addEventListener('input', () => setAngle(num.dataset.cat, num.value));
-        num.addEventListener('blur', () => {
-            const cfg = Engine.getSettings().categories[num.dataset.cat];
-            num.value = Engine.normalizeAngle(cfg.angle);
-        });
-    });
-
-    document.getElementById('sct-category-list')?.addEventListener('click', (ev) => {
+    // 增删渐变色
+    list.addEventListener('click', (ev) => {
         const addBtn = ev.target.closest('.sct-add-stop');
         const removeBtn = ev.target.closest('.sct-remove-stop');
         if (addBtn) {
@@ -322,15 +319,11 @@ function bindUI() {
     document.getElementById('sct-reset')?.addEventListener('click', () => {
         Engine.resetSettings();
         saveSettings();
-        Object.keys(Engine.CATEGORY_META).forEach((cat) => syncCategoryUI(cat));
+        renderPanel();
         if (enabledBox) enabledBox.checked = Engine.getSettings().enabled;
         refreshAll();
         if (typeof toastr !== 'undefined') toastr.info('已恢复默认配色（跟随主题）');
     });
-}
-
-function syncUIFromSettings() {
-    Object.keys(Engine.CATEGORY_META).forEach(syncCategoryUI);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -424,7 +417,6 @@ jQuery(async () => {
 
         buildCategoryUI();
         bindUI();
-        syncUIFromSettings();
         setupEvents();
         Engine.processAll(document);
         refreshPreview();

@@ -26,68 +26,60 @@
 }
 
 /* --------------------------------------------------------------------------
-   分类折叠条（对齐「柏宝箱」风格：深色圆角 pill 条 + 右侧箭头）
+   横向分类标签页（对齐「柏宝箱」的 优化/功能/柏宝库 tab 样式）
    -------------------------------------------------------------------------- */
 
 #sct-category-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
-.sct-cat-bar {
+.sct-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.sct-tab {
+    flex: 1 1 0;
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px;
-    background: var(--black10a, rgba(255, 255, 255, 0.06));
-    color: var(--SmartThemeBodyColor);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-
-.sct-cat-bar:hover {
-    background: var(--black20a, rgba(255, 255, 255, 0.1));
-}
-
-.sct-cat-icon {
+    justify-content: center;
+    gap: 5px;
+    padding: 8px 4px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
     color: var(--SmartThemeEmColor);
-    width: 1.2em;
-    text-align: center;
+    opacity: 0.65;
+    font: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+    white-space: nowrap;
 }
 
-.sct-cat-label {
-    flex: 1 1 auto;
-    text-align: left;
+.sct-tab:hover {
+    opacity: 0.9;
 }
 
-.sct-cat-caret {
-    margin-left: auto;
-    color: var(--SmartThemeBodyColor);
-    font-size: 0.85em;
-    transition: transform 0.2s ease;
+.sct-tab.sct-active {
+    opacity: 1;
+    font-weight: 600;
+    border-bottom-color: var(--SmartThemeEmColor);
 }
 
-.sct-cat.sct-open > .sct-cat-bar .sct-cat-caret {
-    transform: rotate(180deg);
+.sct-tab i {
+    font-size: 0.9em;
 }
 
-/* 展开后的内容区：带边框的圆角面板 */
-.sct-cat-body {
+/* 当前分类的设置面板 */
+.sct-tab-panel {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    margin-top: -4px;
-    padding: 12px 14px;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-    background: var(--black05a, rgba(0, 0, 0, 0.15));
+    padding: 2px 2px 0;
 }
 
 /* 模式选择行 */
@@ -217,41 +209,66 @@
     background: var(--black10a, rgba(255, 255, 255, 0.05));
 }
 
-/* 渐变角度行：标签 + 滑杆 + 数字输入 */
+/* --------------------------------------------------------------------------
+   渐变角度行：一条细拉杆 + 后面显示 “xx°”
+   -------------------------------------------------------------------------- */
+
 .sct-angle-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
 }
 
 .sct-angle-row .sct-angle-label {
     flex: 0 0 auto;
 }
 
-.sct-angle-row .sct-angle {
-    flex: 1 1 120px;
-    min-width: 120px;
-    accent-color: var(--SmartThemeQuoteColor, #7ec8ff);
+.sct-angle-deg {
+    flex: 0 0 auto;
+    min-width: 3.5em;
+    text-align: right;
+    color: var(--SmartThemeBodyColor);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 细拉杆：自绘轨道与滑块，不依赖主题默认 range 样式 */
+.sct-angle {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1 1 auto;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--black30a, rgba(0, 0, 0, 0.35));
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+}
+
+.sct-angle::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--SmartThemeQuoteColor, #8fd3f4);
+    border: 2px solid var(--SmartThemeBodyColor, #fff);
     cursor: pointer;
 }
 
-.sct-angle-value {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    color: var(--SmartThemeBodyColor);
+.sct-angle::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--SmartThemeQuoteColor, #8fd3f4);
+    border: 2px solid var(--SmartThemeBodyColor, #fff);
+    cursor: pointer;
 }
 
-.sct-angle-num {
-    width: 4.5em;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 6px;
-    color: var(--SmartThemeBodyColor);
-    font: inherit;
-    padding: 0.2em 0.4em;
-    text-align: center;
+.sct-angle::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--black30a, rgba(0, 0, 0, 0.35));
 }
 
 /* 实时预览框 */
@@ -318,8 +335,7 @@ span.stfc-quote-wrap {
 /* 窄屏（手机端）适配 */
 @media screen and (max-width: 720px) {
     .sct-mode-row,
-    .sct-solid-row,
-    .sct-angle-row {
+    .sct-solid-row {
         flex-direction: column;
         align-items: flex-start;
     }
@@ -337,7 +353,9 @@ span.stfc-quote-wrap {
         min-width: 0;
     }
 
-    .sct-angle-row .sct-angle {
-        width: 100%;
+    /* 手机上 tab 文字略缩，保证四个能放下 */
+    .sct-tab {
+        font-size: 0.85em;
+        gap: 3px;
     }
 }
