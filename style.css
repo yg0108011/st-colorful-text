@@ -111,6 +111,34 @@
     border-radius: 4px;
 }
 
+/* 取色器 + 色号输入框组合 */
+.sct-color-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sct-hex {
+    width: 7.6em;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95em;
+    padding: 0.2em 0.45em;
+}
+
+.sct-stop-hex {
+    width: 6.8em;
+}
+
+.sct-hex.invalid {
+    border-color: #ff7b7b;
+    color: #ff7b7b;
+}
+
 /* 渐变区 */
 .sct-gradient-row {
     display: flex;
@@ -235,5 +263,14 @@ span.stfc-char {
     .sct-mode-row select.sct-mode,
     .sct-cycle-row select.sct-cycle {
         width: 100%;
+    }
+
+    .sct-color-control {
+        width: 100%;
+    }
+
+    .sct-hex {
+        flex: 1;
+        min-width: 0;
     }
 }
