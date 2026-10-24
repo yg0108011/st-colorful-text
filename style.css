@@ -25,34 +25,74 @@
     color: var(--SmartThemeBodyColor);
 }
 
-/* 分类卡片 */
-.sct-card {
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 8px;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
-    padding: 10px 12px;
+/* --------------------------------------------------------------------------
+   分类折叠条（对齐「柏宝箱」风格：深色圆角 pill 条 + 右侧箭头）
+   -------------------------------------------------------------------------- */
+
+#sct-category-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.sct-card-head {
+.sct-cat-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-weight: 600;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: var(--black10a, rgba(255, 255, 255, 0.06));
     color: var(--SmartThemeBodyColor);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
 }
 
-.sct-card-head i {
-    color: var(--SmartThemeQuoteColor);
+.sct-cat-bar:hover {
+    background: var(--black20a, rgba(255, 255, 255, 0.1));
+}
+
+.sct-cat-icon {
+    color: var(--SmartThemeEmColor);
+    width: 1.2em;
+    text-align: center;
+}
+
+.sct-cat-label {
+    flex: 1 1 auto;
+    text-align: left;
+}
+
+.sct-cat-caret {
+    margin-left: auto;
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.85em;
+    transition: transform 0.2s ease;
+}
+
+.sct-cat.sct-open > .sct-cat-bar .sct-cat-caret {
+    transform: rotate(180deg);
+}
+
+/* 展开后的内容区：带边框的圆角面板 */
+.sct-cat-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: -4px;
+    padding: 12px 14px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    background: var(--black05a, rgba(0, 0, 0, 0.15));
 }
 
 /* 模式选择行 */
 .sct-mode-row,
-.sct-solid-row,
-.sct-cycle-row,
-.sct-cycle-length-row {
+.sct-solid-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -62,26 +102,14 @@
 
 .sct-mode-row > span,
 .sct-solid-row > span,
-.sct-cycle-row > span,
-.sct-cycle-length-row > span,
-.sct-gradient-head > span {
+.sct-gradient-head > span,
+.sct-angle-label {
     color: var(--SmartThemeEmColor);
 }
 
-.sct-mode-row select.sct-mode,
-.sct-cycle-row select.sct-cycle {
+.sct-mode-row select.sct-mode {
     min-width: 10em;
     flex: 0 1 auto;
-}
-
-.sct-cycle-length-row input[type="number"] {
-    width: 5em;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 6px;
-    color: var(--SmartThemeBodyColor);
-    font: inherit;
-    padding: 0.2em 0.4em;
 }
 
 /* 颜色选择器：跟随主题边框与配色 */
@@ -181,12 +209,49 @@
     cursor: pointer;
 }
 
-/* 渐变预览条：渐变为主视觉，纯色不喧宾夺主 */
+/* 渐变预览条：随角度实时渲染 */
 .sct-gradient-preview {
     height: 1.5em;
     border-radius: 6px;
     border: 1px solid var(--SmartThemeBorderColor);
     background: var(--black10a, rgba(255, 255, 255, 0.05));
+}
+
+/* 渐变角度行：标签 + 滑杆 + 数字输入 */
+.sct-angle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sct-angle-row .sct-angle-label {
+    flex: 0 0 auto;
+}
+
+.sct-angle-row .sct-angle {
+    flex: 1 1 120px;
+    min-width: 120px;
+    accent-color: var(--SmartThemeQuoteColor, #7ec8ff);
+    cursor: pointer;
+}
+
+.sct-angle-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--SmartThemeBodyColor);
+}
+
+.sct-angle-num {
+    width: 4.5em;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+    padding: 0.2em 0.4em;
+    text-align: center;
 }
 
 /* 实时预览框 */
@@ -244,8 +309,8 @@
     opacity: 0.85;
 }
 
-/* 染色字符：仅颜色变化，不产生任何布局偏移 */
-span.stfc-char {
+/* 裸引号对话包裹 span：仅颜色变化，不产生任何布局偏移 */
+span.stfc-quote-wrap {
     display: inline;
     white-space: inherit;
 }
@@ -254,14 +319,12 @@ span.stfc-char {
 @media screen and (max-width: 720px) {
     .sct-mode-row,
     .sct-solid-row,
-    .sct-cycle-row,
-    .sct-cycle-length-row {
+    .sct-angle-row {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    .sct-mode-row select.sct-mode,
-    .sct-cycle-row select.sct-cycle {
+    .sct-mode-row select.sct-mode {
         width: 100%;
     }
 
@@ -272,5 +335,9 @@ span.stfc-char {
     .sct-hex {
         flex: 1;
         min-width: 0;
+    }
+
+    .sct-angle-row .sct-angle {
+        width: 100%;
     }
 }
