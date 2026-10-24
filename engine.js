@@ -436,12 +436,41 @@ export function applyToRoot(root) {
     processMainText(root, state.settings.categories);
 }
 
-/** 处理单条消息 */
+/** 当前设置指纹：设置未变化时已染色消息直接跳过，避免长聊天反复重建 DOM */
+export function settingsSignature() {
+    const s = state.settings;
+    const parts = Object.keys(CATEGORY_META).map((key) => {
+        const c = s.categories[key];
+        return [key, c.mode, c.solid, c.gradient.join(','), c.cycle, c.cycleLength].join('|');
+    });
+    return `${s.enabled ? '1' : '0'}:${parts.join(';')}`;
+}
+
+/** 清空消息指纹（设置变更需要全量重绘时调用） */
+export function clearSignatures(scope) {
+    (scope || document).querySelectorAll('#chat .mes').forEach((el) => {
+        el.dataset.stfcSig = '';
+        el.dataset.stfcHash = '';
+    });
+}
+
+/** 单条消息文本指纹：流式追加新内容时指纹变化，仅重染该条消息 */
+function messageHash(textEl) {
+    const text = textEl.textContent || '';
+    return `${text.length}|${text.slice(0, 80)}`;
+}
+
+/** 处理单条消息：设置与文本都未变化则跳过，避免重复包裹 */
 export function processMessage(mesEl) {
     if (mesEl.dataset.stfcSkipped === '1') return;
     const textEl = mesEl.querySelector('.mes_text');
     if (!textEl) return;
+    const sig = settingsSignature();
+    const hash = messageHash(textEl);
+    if (mesEl.dataset.stfcSig === sig && mesEl.dataset.stfcHash === hash) return;
     applyToRoot(textEl);
+    mesEl.dataset.stfcSig = sig;
+    mesEl.dataset.stfcHash = hash;
 }
 
 /** 批量处理聊天区内全部消息；scope 默认为 document */
