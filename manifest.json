@@ -7,8 +7,8 @@
     "js": "index.js",
     "css": "style.css",
     "author": "",
-    "version": "1.0.0",
-    "description": "自定义主要 / 斜体 / 下划线 / 引用文本颜色，支持纯色、静态循环渐变（30 字一循环）与跟随酒馆主题。",
+    "version": "1.1.0",
+    "description": "自定义主要 / 斜体 / 下划线 / 引用文本颜色，支持纯色、渐变（字符长度循环或整段话循环，长度可自定义）与跟随酒馆主题。",
     "homePage": "https://github.com/yg0108011/st-colorful-text",
     "auto_update": true,
     "minimum_client_version": "1.12.0"
