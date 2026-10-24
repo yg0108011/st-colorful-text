@@ -84,7 +84,8 @@ function updateGradientStrip(catKey) {
     const cfg = Engine.getSettings().categories[catKey];
     const strip = document.querySelector(`.sct-gradient-preview[data-cat="${catKey}"]`);
     if (!strip) return;
-    strip.style.background = `linear-gradient(90deg, ${cfg.gradient.join(', ')})`;
+    const angle = Engine.normalizeAngle(cfg.angle);
+    strip.style.background = `linear-gradient(${angle}deg, ${cfg.gradient.join(', ')})`;
 }
 
 const HEX_RE = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -141,7 +142,7 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
 
 function syncCategoryUI(catKey) {
     const cfg = Engine.getSettings().categories[catKey];
-    const card = document.querySelector(`.sct-card[data-cat="${catKey}"]`);
+    const card = document.querySelector(`.sct-cat[data-cat="${catKey}"]`);
     if (!card) return;
     card.querySelector('.sct-mode').value = cfg.mode;
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
@@ -155,9 +156,9 @@ function syncCategoryUI(catKey) {
     if (cfg.mode === 'solid') card.querySelector('.sct-solid-row').style.display = 'flex';
     if (cfg.mode === 'gradient') {
         card.querySelector('.sct-gradient-row').style.display = 'flex';
-        card.querySelector('.sct-cycle').value = cfg.cycle;
-        card.querySelector('.sct-cycle-length').value = cfg.cycleLength;
-        card.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
+        const angle = Engine.normalizeAngle(cfg.angle);
+        card.querySelector('.sct-angle').value = angle;
+        card.querySelector('.sct-angle-num').value = angle;
     }
     renderStopPickers(catKey);
 }
@@ -167,45 +168,47 @@ function buildCategoryUI() {
     if (!list) return;
     Object.entries(Engine.CATEGORY_META).forEach(([catKey, meta]) => {
         const card = document.createElement('div');
-        card.className = 'sct-card';
+        card.className = 'sct-cat';
         card.dataset.cat = catKey;
         card.innerHTML = `
-            <div class="sct-card-head"><i class="${meta.icon}"></i><span>${meta.label}</span></div>
-            <label class="sct-mode-row">
-                <span>配色模式</span>
-                <select class="sct-mode text_pole" data-cat="${catKey}">
-                    <option value="theme">跟随酒馆主题</option>
-                    <option value="solid">纯色</option>
-                    <option value="gradient">渐变</option>
-                </select>
-            </label>
-            <div class="sct-solid-row" data-cat="${catKey}">
-                <span>纯色颜色</span>
-                <div class="sct-color-control">
-                    <input type="color" class="sct-solid" data-cat="${catKey}" />
-                    <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
-                </div>
-            </div>
-            <div class="sct-gradient-row" data-cat="${catKey}">
-                <div class="sct-gradient-head">
-                    <span>渐变颜色（2–4 色）</span>
-                    <button type="button" class="sct-add-stop menu_button_icon" data-cat="${catKey}" title="添加一个颜色">
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
-                </div>
-                <div class="sct-stops" data-cat="${catKey}"></div>
-                <div class="sct-gradient-preview" data-cat="${catKey}"></div>
-                <label class="sct-cycle-row">
-                    <span>循环方式</span>
-                    <select class="sct-cycle text_pole" data-cat="${catKey}">
-                        <option value="length">字符长度循环</option>
-                        <option value="paragraph">整段话 / 本句话循环</option>
+            <button type="button" class="sct-cat-bar" data-cat="${catKey}">
+                <i class="${meta.icon} sct-cat-icon"></i>
+                <span class="sct-cat-label">${meta.label}</span>
+                <i class="fa-solid fa-chevron-down sct-cat-caret"></i>
+            </button>
+            <div class="sct-cat-body" hidden>
+                <label class="sct-mode-row">
+                    <span>配色模式</span>
+                    <select class="sct-mode text_pole" data-cat="${catKey}">
+                        <option value="theme">跟随酒馆主题</option>
+                        <option value="solid">纯色</option>
+                        <option value="gradient">渐变</option>
                     </select>
                 </label>
-                <label class="sct-cycle-length-row">
-                    <span>循环字符数</span>
-                    <input type="number" class="sct-cycle-length" data-cat="${catKey}" min="2" max="999" step="1" />
-                </label>
+                <div class="sct-solid-row" data-cat="${catKey}">
+                    <span>纯色颜色</span>
+                    <div class="sct-color-control">
+                        <input type="color" class="sct-solid" data-cat="${catKey}" />
+                        <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
+                    </div>
+                </div>
+                <div class="sct-gradient-row" data-cat="${catKey}">
+                    <div class="sct-gradient-head">
+                        <span>渐变颜色（2–4 色）</span>
+                        <button type="button" class="sct-add-stop menu_button_icon" data-cat="${catKey}" title="添加一个颜色">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                    <div class="sct-stops" data-cat="${catKey}"></div>
+                    <div class="sct-gradient-preview" data-cat="${catKey}"></div>
+                    <div class="sct-angle-row">
+                        <span class="sct-angle-label">渐变角度</span>
+                        <input type="range" class="sct-angle" min="0" max="360" step="1" data-cat="${catKey}" />
+                        <span class="sct-angle-value">
+                            <input type="number" class="sct-angle-num" min="0" max="360" step="1" data-cat="${catKey}" />°
+                        </span>
+                    </div>
+                </div>
             </div>`;
         list.append(card);
     });
@@ -218,6 +221,17 @@ function refreshAll() {
     refreshPreview();
 }
 
+function setAngle(catKey, rawValue) {
+    const cfg = Engine.getSettings().categories[catKey];
+    cfg.angle = Engine.normalizeAngle(rawValue);
+    saveSettings();
+    // 同步面板上滑杆与数字框
+    document.querySelectorAll(`.sct-angle[data-cat="${catKey}"]`).forEach((el) => { el.value = cfg.angle; });
+    document.querySelectorAll(`.sct-angle-num[data-cat="${catKey}"]`).forEach((el) => { el.value = cfg.angle; });
+    updateGradientStrip(catKey);
+    refreshAll();
+}
+
 function bindUI() {
     const enabledBox = document.getElementById('sct-enabled');
     if (enabledBox) {
@@ -228,6 +242,16 @@ function bindUI() {
             refreshAll();
         });
     }
+
+    // 折叠条开合
+    document.querySelectorAll('.sct-cat-bar').forEach((bar) => {
+        bar.addEventListener('click', () => {
+            const cat = bar.closest('.sct-cat');
+            const body = cat.querySelector('.sct-cat-body');
+            const open = cat.classList.toggle('sct-open');
+            body.hidden = !open;
+        });
+    });
 
     document.querySelectorAll('.sct-mode').forEach((select) => {
         select.addEventListener('change', () => {
@@ -253,24 +277,15 @@ function bindUI() {
         );
     });
 
-    document.querySelectorAll('.sct-cycle').forEach((select) => {
-        select.addEventListener('change', () => {
-            const catKey = select.dataset.cat;
-            Engine.getSettings().categories[catKey].cycle = select.value;
-            saveSettings();
-            syncCategoryUI(catKey);
-            refreshAll();
-        });
+    // 角度滑杆与数字框联动
+    document.querySelectorAll('.sct-angle').forEach((slider) => {
+        slider.addEventListener('input', () => setAngle(slider.dataset.cat, slider.value));
     });
-
-    document.querySelectorAll('.sct-cycle-length').forEach((input) => {
-        input.addEventListener('input', () => {
-            const catKey = input.dataset.cat;
-            const cfg = Engine.getSettings().categories[catKey];
-            const n = Number.parseInt(input.value, 10);
-            cfg.cycleLength = Number.isFinite(n) && n >= 2 && n <= 999 ? n : 2;
-            saveSettings();
-            refreshAll();
+    document.querySelectorAll('.sct-angle-num').forEach((num) => {
+        num.addEventListener('input', () => setAngle(num.dataset.cat, num.value));
+        num.addEventListener('blur', () => {
+            const cfg = Engine.getSettings().categories[num.dataset.cat];
+            num.value = Engine.normalizeAngle(cfg.angle);
         });
     });
 
@@ -387,7 +402,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话 / 本句话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）；跟随主题即使用酒馆当前主题配色。颜色可取色器选择，也可手动填写色号（#RGB / #RRGGBB）。</div>
+                <div class="sct-note">渐变模式使用 CSS 原生线性渐变，角度 0–360° 任意可调（0° 自下而上、90° 自左而右、180° 自上而下）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
