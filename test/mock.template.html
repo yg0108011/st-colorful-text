@@ -90,6 +90,16 @@
                 </div>
             </div>
         </div>
+
+        <div class="scene"><div class="scene-title">场景四 · 整段话循环 + 自定义字符长度</div>
+            <div class="mes" id="scene-cycle">
+                <div class="mes_text">
+                    <p>第一段叙述文字，整段从粉走到蓝，段首回到粉色，段尾落在蓝色，不按字数循环。</p>
+                    <p>第二段叙述文字，同样整段走完一遍色标，段首重新从粉色开始。</p>
+                    <p><u>下划线整段循环示例，从绿走到青，段与段各自独立。</u></p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="panel-demo sct-settings-block">
@@ -118,7 +128,7 @@
                     <button type="button" class="menu_button"><i class="fa-solid fa-rotate"></i> 应用到当前聊天</button>
                     <button type="button" class="menu_button"><i class="fa-solid fa-rotate-left"></i> 恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变模式为静态循环渐变：每 30 个字符完成一次颜色循环，整段文字均由渐变色覆盖。</div>
+                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话循环；跟随主题即使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>
@@ -135,6 +145,7 @@
             resetSettings();
             const c = getSettings().categories;
             c.main.mode = 'gradient'; c.main.gradient = ['#ff9ec7', '#b388ff', '#7ec8ff'];
+            c.main.cycle = 'length'; c.main.cycleLength = 12;
             c.italic.mode = 'solid'; c.italic.solid = '#a8c0ff';
             c.underline.mode = 'gradient'; c.underline.gradient = ['#84fab0', '#8fd3f4'];
             c.quote.mode = 'gradient'; c.quote.gradient = ['#f6d365', '#fda085'];
@@ -159,7 +170,7 @@
         check('混合模式：斜体为纯色', italicEl.style.color === 'rgb(168, 192, 255)', 'color=' + italicEl.style.color);
         const mainColors = new Set([...mainSpans].slice(0, 30).map((s) => s.style.color));
         check('混合模式：30 字内颜色有渐变变化', mainColors.size >= 4, 'colors=' + mainColors.size);
-        check('混合模式：位置 0 与 30 同色（循环）', mainSpans[0] && mainSpans[30] && mainSpans[0].style.color === mainSpans[30].style.color);
+        check('混合模式：自定义 12 字循环，位置 0 与 12 同色', mainSpans[0] && mainSpans[12] && mainSpans[0].style.color === mainSpans[12].style.color);
 
         // 场景三：全部纯色
         resetSettings();
@@ -172,6 +183,25 @@
         applyToRoot(solid);
         check('纯色模式：主要文本纯色', solid.style.color === 'rgb(232, 192, 125)', 'color=' + solid.style.color);
         check('纯色模式：引用块纯色', solid.querySelector('blockquote').style.color === 'rgb(240, 163, 163)', 'color=' + solid.querySelector('blockquote').style.color);
+
+        // 场景四：整段话循环（段落独立）+ 下划线整段循环
+        resetSettings();
+        const cycleCats = getSettings().categories;
+        cycleCats.main.mode = 'gradient';
+        cycleCats.main.gradient = ['#ff9ec7', '#7ec8ff'];
+        cycleCats.main.cycle = 'paragraph';
+        cycleCats.underline.mode = 'gradient';
+        cycleCats.underline.gradient = ['#84fab0', '#8fd3f4'];
+        cycleCats.underline.cycle = 'paragraph';
+        const cycleRoot = document.querySelector('#scene-cycle .mes_text');
+        applyToRoot(cycleRoot);
+        const cyclePs = cycleRoot.querySelectorAll('p');
+        const p1Main = cyclePs[0].querySelectorAll('span[data-stfc-cat="main"]');
+        const p2Main = cyclePs[1].querySelectorAll('span[data-stfc-cat="main"]');
+        check('整段循环：两段段首同色（段落独立重置）', p1Main[0] && p2Main[0] && p1Main[0].style.color === p2Main[0].style.color);
+        check('整段循环：第一段段尾为最后一个色标', p1Main[p1Main.length - 1].style.color === 'rgb(126, 200, 255)');
+        const uSpans = cycleRoot.querySelectorAll('span[data-stfc-cat="underline"]');
+        check('整段循环：下划线元素内部逐字上色', uSpans.length >= 5, 'underline spans=' + uSpans.length);
 
         // 幂等性：回到混合配置，重复应用两次
         applyMixedConfig();
@@ -193,6 +223,9 @@
                 '<div class="sct-card-head"><i class="' + meta.icon + '"></i><span>' + meta.label + '</span></div>' +
                 '<label class="sct-mode-row"><span>配色模式</span>' +
                 '<select class="sct-mode text_pole"><option>跟随酒馆主题</option><option>纯色</option><option>渐变</option></select></label>' +
+                '<label class="sct-cycle-row"><span>循环方式</span>' +
+                '<select class="sct-cycle text_pole"><option>字符长度循环</option><option>整段话循环</option></select></label>' +
+                '<label class="sct-cycle-length-row"><span>循环字符数</span><input type="number" min="2" max="999" value="30" /></label>' +
                 '<div class="sct-theme-note">当前跟随酒馆主题配色，切换为纯色或渐变后在此显示对应控件。</div>';
             panel.append(card);
         });
