@@ -1,6 +1,6 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
- * 覆盖：主题/纯色/渐变三模式、30 字循环、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
+ * 覆盖：主题/纯色/渐变三模式、字符长度/整段话两种循环、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
  */
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
@@ -109,7 +109,6 @@ test('渐变模式：主要文本逐字符上色，30 字循环，位置 0 与 3
     assert.notEqual(colorAt(0), colorAt(15), '循环内颜色应有变化');
 
     // 渐变覆盖：主要文本字符全部被包裹（不含跳过标签与引用对话）
-    const plainMainText = '普通主要文本第一段，包含一段内心动作 继续叙述收尾 与普通文字混合在一起 结尾叙述 这是普通段落里的 以及中文 。，。，。，';
     const wrappedMainChars = mainSpans.reduce((n, sp) => n + sp.textContent.length, 0);
     assert.ok(wrappedMainChars >= 20, `主要文本字符应被渐变覆盖，实际 ${wrappedMainChars}`);
 });
@@ -169,15 +168,59 @@ test('代码/链接/加粗不被染色', async () => {
     });
 });
 
+/* ---------------- 整段话循环 ---------------- */
+
+test('整段话循环：每个段落独立走完色标，段首同色、段尾对色', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
+      <div class="mes"><div class="mes_text">
+        <p>第一段甲乙丙丁戊己庚辛壬癸</p>
+        <p>第二段子丑寅卯辰巳午未申酉</p>
+      </div></div>
+    </div></body></html>`, { runScripts: 'outside-only' });
+    global.document = dom.window.document;
+    global.NodeFilter = dom.window.NodeFilter;
+    global.Node = dom.window.Node;
+    engine = await import('../st-colorful-text/engine.js');
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
+    engine.getSettings().categories.main.cycle = 'paragraph';
+    engine.processAll(document);
+
+    const ps = document.querySelectorAll('.mes_text p');
+    const first = [...ps[0].querySelectorAll('span[data-stfc-cat="main"]')];
+    const second = [...ps[1].querySelectorAll('span[data-stfc-cat="main"]')];
+    assert.equal(first[0].style.color, 'rgb(255, 0, 0)');
+    assert.equal(first[first.length - 1].style.color, 'rgb(0, 0, 255)');
+    assert.equal(second[0].style.color, 'rgb(255, 0, 0)');
+    assert.equal(second[second.length - 1].style.color, 'rgb(0, 0, 255)');
+});
+
+/* ---------------- 自定义字符长度循环 ---------------- */
+
+test('字符长度循环：自定义 cycleLength，第 0 与第 N 字同色，循环内有变化', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
+    engine.getSettings().categories.main.cycleLength = 10;
+    engine.processAll(document);
+
+    const mainSpans = [...document.querySelectorAll('span[data-stfc-cat="main"]')];
+    assert.ok(mainSpans.length > 10, '主要文本应被逐字符包裹');
+    assert.equal(mainSpans[0].style.color, mainSpans[10].style.color);
+    assert.notEqual(mainSpans[0].style.color, mainSpans[5].style.color);
+});
+
 /* ---------------- 设置归一化 ---------------- */
 
-test('normalizeSettings：非法模式回退主题，过短渐变回退默认', async () => {
+test('normalizeSettings：非法模式回退主题，过短渐变回退默认，循环字段校验', async () => {
     await loadEngine();
     const bad = {
         enabled: 'yes',
         categories: {
-            main: { mode: 'rainbow', solid: '#123456', gradient: ['#abc'] },
-            italic: { mode: 'solid', solid: '#00ff00' },
+            main: { mode: 'rainbow', solid: '#123456', gradient: ['#abc'], cycle: 'rainbow', cycleLength: 'abc' },
+            italic: { mode: 'solid', solid: '#00ff00', cycle: 'paragraph', cycleLength: 1 },
+            quote: { cycleLength: 5000 },
         },
     };
     const norm = engine.normalizeSettings(bad);
@@ -186,6 +229,11 @@ test('normalizeSettings：非法模式回退主题，过短渐变回退默认', 
     assert.ok(norm.categories.main.gradient.length >= 2);
     assert.equal(norm.categories.italic.mode, 'solid');
     assert.equal(norm.categories.quote.mode, 'theme');
+    assert.equal(norm.categories.main.cycle, 'length');
+    assert.equal(norm.categories.main.cycleLength, 30);
+    assert.equal(norm.categories.italic.cycle, 'paragraph');
+    assert.equal(norm.categories.italic.cycleLength, 30);
+    assert.equal(norm.categories.quote.cycleLength, 30);
 });
 
 /* ---------------- 渐变颜色工具 ---------------- */
