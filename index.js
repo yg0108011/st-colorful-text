@@ -331,11 +331,12 @@ function bindUI() {
 /* -------------------------------------------------------------------------- */
 
 let observer = null;
-let debounceTimer = null;
+let rafId = null;
 
 function scheduleProcess() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+        rafId = null;
         // 染色写入期间断开观察器，避免自身 DOM 改动触发二次回调
         if (observer) observer.disconnect();
         try {
@@ -344,7 +345,7 @@ function scheduleProcess() {
             const chatEl = document.getElementById('chat');
             if (observer && chatEl) observer.observe(chatEl, { childList: true, subtree: true, characterData: true });
         }
-    }, 250);
+    });
 }
 
 function setupEvents() {
