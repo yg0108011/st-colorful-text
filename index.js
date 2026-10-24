@@ -123,7 +123,7 @@ function buildCategoryUI() {
                     <span>循环方式</span>
                     <select class="sct-cycle text_pole" data-cat="${catKey}">
                         <option value="length">字符长度循环</option>
-                        <option value="paragraph">整段话循环</option>
+                        <option value="paragraph">整段话 / 本句话循环</option>
                     </select>
                 </label>
                 <label class="sct-cycle-length-row">
@@ -304,7 +304,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话循环；跟随主题即使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持字符长度循环（每 N 个字一个循环，默认 30，可自定义）或整段话 / 本句话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）；跟随主题即使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
