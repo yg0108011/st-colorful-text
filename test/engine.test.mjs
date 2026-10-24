@@ -1,7 +1,7 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
- * 覆盖：主题/纯色/渐变三模式、字符长度/整段话两种循环、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
- * 整段话循环边界：主要文本按自然段（<p>），斜体/下划线/引用按本元素（本句话）。
+ * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
+ * 渐变渲染为 CSS 原生 linear-gradient(angle) + background-clip: text。
  */
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
@@ -33,18 +33,19 @@ let engine;
 
 async function loadEngine() {
     makeDom();
-    engine = await import('../st-colorful-text/engine.js');
+    engine = await import('../engine.js');
 }
 
 function resetChat() {
     document.getElementById('chat').innerHTML = SAMPLE;
 }
 
-function setMode(cat, mode, solid, gradient) {
+function setMode(cat, mode, solid, gradient, angle) {
     const cfg = engine.getSettings().categories[cat];
     cfg.mode = mode;
-    if (solid) cfg.solid = solid;
-    if (gradient) cfg.gradient = gradient;
+    if (solid !== undefined) cfg.solid = solid;
+    if (gradient !== undefined) cfg.gradient = gradient;
+    if (angle !== undefined) cfg.angle = angle;
 }
 
 /* ---------------- 主题模式 ---------------- */
@@ -55,10 +56,13 @@ test('主题模式：不产生任何染色包裹与内联颜色', async () => {
     engine.resetSettings();
     engine.processAll(document);
     const text = document.querySelector('#m1 .mes_text');
-    assert.equal(text.querySelectorAll('span.stfc-char').length, 0);
+    assert.equal(text.querySelectorAll('span.stfc-quote-wrap').length, 0);
     assert.equal(text.style.color, '');
     ['i', 'u', 'q', 'blockquote'].forEach((sel) => {
-        text.querySelectorAll(sel).forEach((el) => assert.equal(el.style.color, ''));
+        text.querySelectorAll(sel).forEach((el) => {
+            assert.equal(el.style.color, '');
+            assert.ok(!el.style.backgroundImage, '主题模式不应设置背景');
+        });
     });
 });
 
@@ -82,57 +86,63 @@ test('纯色模式：四类元素分别套用纯色，双引号对话归入引�
     assert.equal(text.querySelector('q').style.color, 'rgb(255, 165, 0)');
 
     // 普通段落里的英文双引号与中文双引号对话都应被引用色包裹
-    const plainQuoteSpans = text.querySelectorAll('span[data-stfc-cat="quote"]');
-    assert.ok(plainQuoteSpans.length >= 2, '普通文本中的双引号对话应被切分染色');
+    const plainQuoteSpans = text.querySelectorAll('span.stfc-quote-wrap');
+    assert.ok(plainQuoteSpans.length >= 2, '普通文本中的双引号对话应被切分包裹');
     plainQuoteSpans.forEach((sp) => assert.equal(sp.style.color, 'rgb(255, 165, 0)'));
 });
 
-/* ---------------- 渐变模式：30 字循环与全覆盖 ---------------- */
+/* ---------------- 渐变模式 ---------------- */
 
-test('渐变模式：主要文本逐字符上色，30 字循环，位置 0 与 30 同色', async () => {
+test('渐变模式：主要文本根容器带 linear-gradient 背景与 text 裁剪', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff'], 90);
     setMode('italic', 'theme');
     setMode('underline', 'theme');
     setMode('quote', 'theme');
     engine.processAll(document);
 
     const text = document.querySelector('#m1 .mes_text');
-    const mainSpans = [...text.querySelectorAll('span[data-stfc-cat="main"]')];
-    assert.ok(mainSpans.length > 30, '主要文本应被逐字符包裹');
-
-    // 循环校验：位置 i 与 i+30 颜色一致
-    const colorAt = (i) => mainSpans[i].style.color;
-    assert.equal(colorAt(0), colorAt(30));
-    assert.equal(colorAt(5), colorAt(35));
-    assert.notEqual(colorAt(0), colorAt(15), '循环内颜色应有变化');
-
-    // 渐变覆盖：主要文本字符全部被包裹（不含跳过标签与引用对话）
-    const wrappedMainChars = mainSpans.reduce((n, sp) => n + sp.textContent.length, 0);
-    assert.ok(wrappedMainChars >= 20, `主要文本字符应被渐变覆盖，实际 ${wrappedMainChars}`);
+    assert.ok(text.style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.ok(text.style.backgroundImage.includes('rgb(255, 0, 0)'));
+    assert.ok(text.style.backgroundImage.includes('rgb(0, 0, 255)'));
+    assert.equal(text.style.webkitTextFillColor, 'transparent');
+    assert.equal(text.style.color, 'transparent');
 });
 
-test('渐变模式：斜体/下划线/引用元素内部逐字符循环上色', async () => {
+test('渐变角度：不同角度写入不同 deg，0/180/270 均可', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 180);
+    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff'], 0);
+    engine.processAll(document);
+
+    const text = document.querySelector('#m1 .mes_text');
+    assert.ok(text.querySelector('i').style.backgroundImage.includes('linear-gradient(180deg'));
+    assert.ok(text.querySelector('u').style.backgroundImage.includes('linear-gradient(0deg'));
+});
+
+test('渐变模式：斜体/下划线/引用元素各自带渐变背景，双引号对话包裹', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
     setMode('main', 'theme');
-    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00']);
-    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff']);
-    setMode('quote', 'gradient', null, ['#ffa500', '#ff0000']);
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 90);
+    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff'], 90);
+    setMode('quote', 'gradient', null, ['#ffa500', '#ff0000'], 90);
     engine.processAll(document);
 
     const text = document.querySelector('#m1 .mes_text');
-    const italicSpans = text.querySelectorAll('span[data-stfc-cat="italic"]');
-    const underlineSpans = text.querySelectorAll('span[data-stfc-cat="underline"]');
-    const quoteSpans = text.querySelectorAll('span[data-stfc-cat="quote"]');
-    assert.ok(italicSpans.length > 5);
-    assert.ok(underlineSpans.length > 5);
-    assert.ok(quoteSpans.length >= 3, 'blockquote / q / 普通双引号对话都应被引用渐变覆盖');
-    // 无嵌套包裹
-    text.querySelectorAll('span.stfc-char span.stfc-char').forEach((n) => assert.fail('不应出现嵌套染色包裹'));
+    assert.ok(text.querySelector('i').style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.ok(text.querySelector('u').style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.ok(text.querySelector('blockquote').style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.ok(text.querySelector('q').style.backgroundImage.includes('linear-gradient(90deg'));
+    // 裸双引号对话包裹 span 且带引用渐变
+    const wraps = text.querySelectorAll('span.stfc-quote-wrap');
+    assert.ok(wraps.length >= 2);
+    wraps.forEach((sp) => assert.ok(sp.style.backgroundImage.includes('linear-gradient(90deg')));
 });
 
 /* ---------------- 幂等性 ---------------- */
@@ -141,17 +151,17 @@ test('重复应用两次：包裹数量不变，无嵌套，无残留内联样�
     await loadEngine();
     resetChat();
     engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#00ff00']);
-    setMode('italic', 'gradient');
+    setMode('main', 'gradient', null, ['#ff0000', '#00ff00'], 90);
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 90);
     setMode('underline', 'solid', '#0000ff');
     setMode('quote', 'solid', '#ffa500');
     engine.processAll(document);
-    const before = document.querySelectorAll('span.stfc-char').length;
+    const before = document.querySelectorAll('span.stfc-quote-wrap').length;
     engine.processAll(document);
     engine.processAll(document);
-    const after = document.querySelectorAll('span.stfc-char').length;
+    const after = document.querySelectorAll('span.stfc-quote-wrap').length;
     assert.equal(after, before);
-    assert.equal(document.querySelectorAll('span.stfc-char span.stfc-char').length, 0);
+    assert.equal(document.querySelectorAll('span.stfc-quote-wrap span.stfc-quote-wrap').length, 0);
 });
 
 /* ---------------- 跳过标签 ---------------- */
@@ -160,158 +170,50 @@ test('代码/链接/加粗不被染色', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff'], 90);
     engine.processAll(document);
     const text = document.querySelector('#m1 .mes_text');
     ['code', 'a', 'strong'].forEach((sel) => {
         const el = text.querySelector(sel);
-        assert.equal(el.querySelectorAll('span.stfc-char').length, 0);
+        assert.equal(el.querySelectorAll('span.stfc-quote-wrap').length, 0);
+        assert.ok(!el.style.backgroundImage, `${sel} 不应被染色`);
     });
-});
-
-/* ---------------- 整段话循环 ---------------- */
-
-test('整段话循环：每个段落独立走完色标，段首同色、段尾对色', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
-      <div class="mes"><div class="mes_text">
-        <p>第一段甲乙丙丁戊己庚辛壬癸</p>
-        <p>第二段子丑寅卯辰巳午未申酉</p>
-      </div></div>
-    </div></body></html>`, { runScripts: 'outside-only' });
-    global.document = dom.window.document;
-    global.NodeFilter = dom.window.NodeFilter;
-    global.Node = dom.window.Node;
-    engine = await import('../st-colorful-text/engine.js');
-    engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
-    engine.getSettings().categories.main.cycle = 'paragraph';
-    engine.processAll(document);
-
-    const ps = document.querySelectorAll('.mes_text p');
-    const first = [...ps[0].querySelectorAll('span[data-stfc-cat="main"]')];
-    const second = [...ps[1].querySelectorAll('span[data-stfc-cat="main"]')];
-    assert.equal(first[0].style.color, 'rgb(255, 0, 0)');
-    assert.equal(first[first.length - 1].style.color, 'rgb(0, 0, 255)');
-    assert.equal(second[0].style.color, 'rgb(255, 0, 0)');
-    assert.equal(second[second.length - 1].style.color, 'rgb(0, 0, 255)');
-});
-
-test('整段话循环：段内引号不打断主要文本梯度，段首红、段尾蓝，引号后继续过渡', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
-      <div class="mes"><div class="mes_text">
-        <p>开头叙述“对话内容在这里”结尾叙述收尾。</p>
-      </div></div>
-    </div></body></html>`, { runScripts: 'outside-only' });
-    global.document = dom.window.document;
-    global.NodeFilter = dom.window.NodeFilter;
-    global.Node = dom.window.Node;
-    engine = await import('../st-colorful-text/engine.js');
-    engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
-    engine.getSettings().categories.main.cycle = 'paragraph';
-    setMode('quote', 'theme');
-    engine.processAll(document);
-
-    const mainSpans = [...document.querySelectorAll('span[data-stfc-cat="main"]')];
-    assert.ok(mainSpans.length > 5, `主要文本应被逐字符包裹，实际 ${mainSpans.length}`);
-    assert.equal(mainSpans[0].style.color, 'rgb(255, 0, 0)');
-    assert.equal(mainSpans[mainSpans.length - 1].style.color, 'rgb(0, 0, 255)');
-    // 引号后的第一个主要字符不是红色（梯度没有在引号处重置）
-    assert.notEqual(mainSpans[4].style.color, 'rgb(255, 0, 0)');
-});
-
-test('整段话循环：斜体元素跨文本节点连续渐变，不按节点重置', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
-      <div class="mes"><div class="mes_text">
-        <p><i>斜体开头<b>加粗不染色</b>斜体结尾</i></p>
-      </div></div>
-    </div></body></html>`, { runScripts: 'outside-only' });
-    global.document = dom.window.document;
-    global.NodeFilter = dom.window.NodeFilter;
-    global.Node = dom.window.Node;
-    engine = await import('../st-colorful-text/engine.js');
-    engine.resetSettings();
-    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00']);
-    engine.getSettings().categories.italic.cycle = 'paragraph';
-    engine.processAll(document);
-
-    const italicSpans = [...document.querySelectorAll('span[data-stfc-cat="italic"]')];
-    assert.equal(italicSpans[0].style.color, 'rgb(0, 255, 0)');
-    assert.equal(italicSpans[italicSpans.length - 1].style.color, 'rgb(255, 255, 0)');
-    // 第二个文本节点的首字不是绿色（梯度延续到元素末尾）
-    assert.notEqual(italicSpans[4].style.color, 'rgb(0, 255, 0)');
-});
-
-test('整段话循环：下划线元素跨文本节点连续渐变', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="chat">
-      <div class="mes"><div class="mes_text">
-        <p><u>下划线开头<b>加粗不染色</b>下划线结尾</u></p>
-      </div></div>
-    </div></body></html>`, { runScripts: 'outside-only' });
-    global.document = dom.window.document;
-    global.NodeFilter = dom.window.NodeFilter;
-    global.Node = dom.window.Node;
-    engine = await import('../st-colorful-text/engine.js');
-    engine.resetSettings();
-    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff']);
-    engine.getSettings().categories.underline.cycle = 'paragraph';
-    engine.processAll(document);
-
-    const underlineSpans = [...document.querySelectorAll('span[data-stfc-cat="underline"]')];
-    assert.equal(underlineSpans[0].style.color, 'rgb(0, 0, 255)');
-    assert.equal(underlineSpans[underlineSpans.length - 1].style.color, 'rgb(255, 0, 255)');
-    assert.notEqual(underlineSpans[4].style.color, 'rgb(0, 0, 255)');
-});
-
-/* ---------------- 自定义字符长度循环 ---------------- */
-
-test('字符长度循环：自定义 cycleLength，第 0 与第 N 字同色，循环内有变化', async () => {
-    await loadEngine();
-    resetChat();
-    engine.resetSettings();
-    setMode('main', 'gradient', null, ['#ff0000', '#0000ff']);
-    engine.getSettings().categories.main.cycleLength = 10;
-    engine.processAll(document);
-
-    const mainSpans = [...document.querySelectorAll('span[data-stfc-cat="main"]')];
-    assert.ok(mainSpans.length > 10, '主要文本应被逐字符包裹');
-    assert.equal(mainSpans[0].style.color, mainSpans[10].style.color);
-    assert.notEqual(mainSpans[0].style.color, mainSpans[5].style.color);
 });
 
 /* ---------------- 设置归一化 ---------------- */
 
-test('normalizeSettings：非法模式回退主题，过短渐变回退默认，循环字段校验', async () => {
+test('normalizeSettings：非法模式回退主题，过短渐变回退默认，角度校验，旧字段清理', async () => {
     await loadEngine();
     const bad = {
         enabled: 'yes',
         categories: {
-            main: { mode: 'rainbow', solid: '#123456', gradient: ['#abc'], cycle: 'rainbow', cycleLength: 'abc' },
-            italic: { mode: 'solid', solid: '#00ff00', cycle: 'paragraph', cycleLength: 1 },
-            quote: { cycleLength: 5000 },
+            main: { mode: 'rainbow', solid: '#123456', gradient: ['#abc'], angle: 'abc' },
+            italic: { mode: 'solid', solid: '#00ff00', angle: 400 },
+            quote: { angle: -90, cycle: 'paragraph', cycleLength: 5000 },
         },
     };
     const norm = engine.normalizeSettings(bad);
     assert.equal(norm.enabled, true);
     assert.equal(norm.categories.main.mode, 'theme');
     assert.ok(norm.categories.main.gradient.length >= 2);
+    assert.equal(norm.categories.main.angle, 90); // 非法角度回退默认
     assert.equal(norm.categories.italic.mode, 'solid');
+    assert.equal(norm.categories.italic.angle, 40); // 400° 归一化到 40°
     assert.equal(norm.categories.quote.mode, 'theme');
-    assert.equal(norm.categories.main.cycle, 'length');
-    assert.equal(norm.categories.main.cycleLength, 30);
-    assert.equal(norm.categories.italic.cycle, 'paragraph');
-    assert.equal(norm.categories.italic.cycleLength, 30);
-    assert.equal(norm.categories.quote.cycleLength, 30);
+    assert.equal(norm.categories.quote.angle, 270); // -90° 归一化到 270°
+    assert.equal(norm.categories.quote.cycle, undefined); // 旧字段已清理
+    assert.equal(norm.categories.quote.cycleLength, undefined);
 });
 
-/* ---------------- 渐变颜色工具 ---------------- */
+/* ---------------- 角度工具 ---------------- */
 
-test('gradientColor：端点与中段插值正确', async () => {
+test('normalizeAngle：0–360 全角度与取模', async () => {
     await loadEngine();
-    const stops = [engine.hexToRgb('#ff0000'), engine.hexToRgb('#0000ff')];
-    assert.deepEqual(engine.gradientColor(stops, 0), [255, 0, 0]);
-    assert.deepEqual(engine.gradientColor(stops, 1), [0, 0, 255]);
-    const mid = engine.gradientColor(stops, 0.5);
-    assert.equal(mid[0], 128);
-    assert.equal(mid[2], 128);
+    assert.equal(engine.normalizeAngle(0), 0);
+    assert.equal(engine.normalizeAngle(90), 90);
+    assert.equal(engine.normalizeAngle(360), 0);
+    assert.equal(engine.normalizeAngle(359), 359);
+    assert.equal(engine.normalizeAngle(-1), 359);
+    assert.equal(engine.normalizeAngle(720), 0);
+    assert.equal(engine.normalizeAngle(''), 90);
 });
