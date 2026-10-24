@@ -4,12 +4,12 @@
  * 支持 主要文本 / 斜体文本 / 下划线文本 / 引用文本（含双引号对话）三种模式：
  *   theme    跟随酒馆主题
  *   solid    纯色自定义
- *   gradient 静态循环渐变（每 30 个字符完成一次循环，渐变覆盖全部字符）
+ *   gradient 渐变：整段话循环，或自定义字符长度循环（默认 30 字一循环）
  */
 
 export const MODULE_NAME = 'st-colorful-text';
 
-/** 渐变循环长度：30 个字一个静态循环（需求固定值） */
+/** 默认循环字符数（字符长度循环模式下的兜底值，可在面板自定义 2–999） */
 export const CYCLE_LENGTH = 30;
 
 export const CATEGORY_META = {
@@ -42,21 +42,29 @@ export const defaultSettings = {
             mode: 'theme',
             solid: '#dcdcd2',
             gradient: ['#ff9ec7', '#b388ff', '#7ec8ff'],
+            cycle: 'length',
+            cycleLength: 30,
         },
         italic: {
             mode: 'theme',
             solid: '#919191',
             gradient: ['#fbc2eb', '#a6c1ee'],
+            cycle: 'length',
+            cycleLength: 30,
         },
         underline: {
             mode: 'theme',
             solid: '#bce7cf',
             gradient: ['#84fab0', '#8fd3f4'],
+            cycle: 'length',
+            cycleLength: 30,
         },
         quote: {
             mode: 'theme',
             solid: '#e18a24',
             gradient: ['#f6d365', '#fda085'],
+            cycle: 'length',
+            cycleLength: 30,
         },
     },
 };
@@ -112,6 +120,9 @@ export function normalizeSettings(raw) {
             cfg.gradient = structuredClone(defaultSettings.categories[cat].gradient);
         }
         if (!cfg.solid) cfg.solid = defaultSettings.categories[cat].solid;
+        if (!['length', 'paragraph'].includes(cfg.cycle)) cfg.cycle = 'length';
+        const len = Number.parseInt(cfg.cycleLength, 10);
+        cfg.cycleLength = Number.isFinite(len) && len >= 2 && len <= 999 ? len : 30;
     }
     if (typeof merged.enabled !== 'boolean') merged.enabled = true;
     return merged;
@@ -241,17 +252,33 @@ function writeSegment(fragment, text, cfg, counterRef, catKey) {
         counterRef.value += text.length;
         return;
     }
-    // gradient —— 静态循环渐变，30 字一循环
+    // gradient —— 两种循环方式：整段话一循环 / 自定义字符长度循环
     const stops = cfg.gradient.map(hexToRgb);
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        const p = (counterRef.value % CYCLE_LENGTH) / CYCLE_LENGTH;
+    const len = text.length;
+    if (cfg.cycle === 'paragraph') {
+        // 整段话循环：本片段首字到尾字走完一遍色标，片段之间各自独立
+        for (let i = 0; i < len; i++) {
+            const p = len > 1 ? i / (len - 1) : 0;
+            const color = gradientColor(stops, p);
+            const span = document.createElement('span');
+            span.className = 'stfc-char stfc-tagged';
+            span.dataset.stfcCat = catKey;
+            span.style.color = rgbStr(color);
+            span.textContent = text[i];
+            fragment.appendChild(span);
+        }
+        return;
+    }
+    // 字符长度循环：每 cycleLength 个字一个循环
+    const cycleLen = Number.isFinite(cfg.cycleLength) && cfg.cycleLength >= 2 ? Math.floor(cfg.cycleLength) : CYCLE_LENGTH;
+    for (let i = 0; i < len; i++) {
+        const p = (counterRef.value % cycleLen) / cycleLen;
         const color = gradientColor(stops, p);
         const span = document.createElement('span');
         span.className = 'stfc-char stfc-tagged';
         span.dataset.stfcCat = catKey;
         span.style.color = rgbStr(color);
-        span.textContent = ch;
+        span.textContent = text[i];
         fragment.appendChild(span);
         counterRef.value++;
     }
