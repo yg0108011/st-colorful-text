@@ -4,14 +4,11 @@
  * 支持 主要文本 / 斜体文本 / 下划线文本 / 引用文本（含双引号对话）三种模式：
  *   theme    跟随酒馆主题
  *   solid    纯色自定义
- *   gradient 渐变：整段话循环（主要文本按自然段，斜体/下划线/引用按本句话/本元素），
- *              或自定义字符长度循环（默认 30 字一循环）
+ *   gradient CSS 原生线性渐变：linear-gradient(角度 deg, 色标…) + background-clip: text，
+ *            角度 0–360° 任意设置（0deg 自下而上，90deg 自左而右，180deg 自上而下）。
  */
 
 export const MODULE_NAME = 'st-colorful-text';
-
-/** 默认循环字符数（字符长度循环模式下的兜底值，可在面板自定义 2–999） */
-export const CYCLE_LENGTH = 30;
 
 export const CATEGORY_META = {
     main: {
@@ -43,29 +40,25 @@ export const defaultSettings = {
             mode: 'theme',
             solid: '#dcdcd2',
             gradient: ['#ff9ec7', '#b388ff', '#7ec8ff'],
-            cycle: 'length',
-            cycleLength: 30,
+            angle: 90,
         },
         italic: {
             mode: 'theme',
             solid: '#919191',
             gradient: ['#fbc2eb', '#a6c1ee'],
-            cycle: 'length',
-            cycleLength: 30,
+            angle: 90,
         },
         underline: {
             mode: 'theme',
             solid: '#bce7cf',
             gradient: ['#84fab0', '#8fd3f4'],
-            cycle: 'length',
-            cycleLength: 30,
+            angle: 90,
         },
         quote: {
             mode: 'theme',
             solid: '#e18a24',
             gradient: ['#f6d365', '#fda085'],
-            cycle: 'length',
-            cycleLength: 30,
+            angle: 90,
         },
     },
 };
@@ -107,7 +100,14 @@ export function deepMerge(base, overlay) {
     return out;
 }
 
-/** 校验并补齐异常设置，保证老版本升级后字段完整 */
+/** 角度归一化：任意数字取整后映射到 [0, 359] 度；非法值回退 90°（自左而右） */
+export function normalizeAngle(raw) {
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n)) return 90;
+    return ((n % 360) + 360) % 360;
+}
+
+/** 校验并补齐异常设置，保证老版本升级后字段完整（旧版 cycle / cycleLength 字段自动丢弃） */
 export function normalizeSettings(raw) {
     const merged = deepMerge(defaultSettings, raw || {});
     for (const cat of Object.keys(CATEGORY_META)) {
@@ -119,11 +119,14 @@ export function normalizeSettings(raw) {
         if (!['theme', 'solid', 'gradient'].includes(cfg.mode)) cfg.mode = 'theme';
         if (!Array.isArray(cfg.gradient) || cfg.gradient.length < 2) {
             cfg.gradient = structuredClone(defaultSettings.categories[cat].gradient);
+        } else if (cfg.gradient.length > 4) {
+            cfg.gradient = cfg.gradient.slice(0, 4);
         }
         if (!cfg.solid) cfg.solid = defaultSettings.categories[cat].solid;
-        if (!['length', 'paragraph'].includes(cfg.cycle)) cfg.cycle = 'length';
-        const len = Number.parseInt(cfg.cycleLength, 10);
-        cfg.cycleLength = Number.isFinite(len) && len >= 2 && len <= 999 ? len : 30;
+        cfg.angle = normalizeAngle(cfg.angle);
+        // 旧版残留字段不再使用，清理掉保持设置干净
+        delete cfg.cycle;
+        delete cfg.cycleLength;
     }
     if (typeof merged.enabled !== 'boolean') merged.enabled = true;
     return merged;
@@ -139,27 +142,6 @@ export function hexToRgb(hex) {
     const n = parseInt(h, 16);
     if (Number.isNaN(n)) return [128, 128, 128];
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function rgbStr(c) {
-    return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-}
-
-function lerp(a, b, t) {
-    return a + (b - a) * t;
-}
-
-function lerpColor(a, b, t) {
-    return [Math.round(lerp(a[0], b[0], t)), Math.round(lerp(a[1], b[1], t)), Math.round(lerp(a[2], b[2], t))];
-}
-
-/** 在 stops 中按 p(0~1) 取插值颜色 */
-export function gradientColor(stopsRgb, p) {
-    if (stopsRgb.length === 1) return stopsRgb[0];
-    const seg = Math.min(Math.max(p, 0), 1) * (stopsRgb.length - 1);
-    const i = Math.min(Math.floor(seg), stopsRgb.length - 2);
-    const t = seg - i;
-    return lerpColor(stopsRgb[i], stopsRgb[i + 1], t);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -195,11 +177,46 @@ function isSkipped(node) {
     return false;
 }
 
-/** 收集根节点下所有需要处理的文本节点（先收集，避免边遍历边改 DOM） */
-function collectTextNodes(root) {
+/** 把元素按类别配置上色：theme 还原主题 / solid 纯色 / gradient CSS 角度渐变 */
+function paintElement(el, cfg) {
+    el.classList.add('stfc-tagged');
+    el.style.removeProperty('color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('-webkit-background-clip');
+    el.style.removeProperty('background-clip');
+    el.style.removeProperty('-webkit-text-fill-color');
+    if (cfg.mode === 'solid') {
+        el.style.color = cfg.solid;
+        return;
+    }
+    if (cfg.mode === 'gradient') {
+        const stops = cfg.gradient.join(', ');
+        const angle = normalizeAngle(cfg.angle);
+        el.style.backgroundImage = `linear-gradient(${angle}deg, ${stops})`;
+        el.style.webkitBackgroundClip = 'text';
+        el.style.backgroundClip = 'text';
+        el.style.webkitTextFillColor = 'transparent';
+        el.style.color = 'transparent';
+    }
+    // theme：不加任何内联样式，完全跟随酒馆主题
+}
+
+/** 处理特殊元素类别（斜体 / 下划线 / 引用容器） */
+function paintCategoryElements(root, selector, cfg) {
+    root.querySelectorAll(selector).forEach((el) => {
+        if (el.closest('.mes_reasoning')) return;
+        paintElement(el, cfg);
+    });
+}
+
+/** 双引号对话切分：“...” 与 "..." 归入引用类别 */
+const QUOTE_RE = /[“"]([^”"]+)[”"]/g;
+
+/** 收集根节点下需要检查的文本节点（先收集，避免边遍历边改 DOM） */
+function collectMainQuoteNodes(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
-            if (!node.textContent) return NodeFilter.FILTER_REJECT;
+            if (!node.textContent || !/[“"]/.test(node.textContent)) return NodeFilter.FILTER_REJECT;
             if (isSkipped(node)) return NodeFilter.FILTER_REJECT;
             const parent = node.parentElement;
             if (!parent) return NodeFilter.FILTER_REJECT;
@@ -215,9 +232,36 @@ function collectTextNodes(root) {
     return nodes;
 }
 
+/** 主要文本里裸写的双引号对话（无 q 标签）：包一层 span 并套用引用配色 */
+function wrapBareQuotes(root, quoteCfg) {
+    if (!quoteCfg || quoteCfg.mode === 'theme') return;
+    const nodes = collectMainQuoteNodes(root).filter((node) => categoryOf(node) === 'main');
+    nodes.forEach((node) => {
+        const text = node.textContent;
+        QUOTE_RE.lastIndex = 0;
+        if (!QUOTE_RE.test(text)) return;
+        QUOTE_RE.lastIndex = 0;
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        let m;
+        while ((m = QUOTE_RE.exec(text)) !== null) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            const span = document.createElement('span');
+            span.className = 'stfc-quote-wrap';
+            span.dataset.stfcCat = 'quote';
+            span.textContent = m[0];
+            paintElement(span, quoteCfg);
+            frag.appendChild(span);
+            last = m.index + m[0].length;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+    });
+}
+
 /** 撤销根节点上本扩展做过的全部改动（幂等重绘基础） */
 export function resetRoot(root) {
-    root.querySelectorAll('span.stfc-char').forEach((span) => {
+    root.querySelectorAll('span.stfc-quote-wrap').forEach((span) => {
         const parent = span.parentNode;
         if (!parent) return;
         while (span.firstChild) parent.insertBefore(span.firstChild, span);
@@ -226,203 +270,11 @@ export function resetRoot(root) {
     root.querySelectorAll('.stfc-tagged').forEach((el) => {
         el.classList.remove('stfc-tagged');
         el.style.removeProperty('color');
-        el.style.removeProperty('background');
         el.style.removeProperty('background-image');
+        el.style.removeProperty('-webkit-background-clip');
+        el.style.removeProperty('background-clip');
         el.style.removeProperty('-webkit-text-fill-color');
         el.style.removeProperty('text-shadow');
-    });
-}
-
-/**
- * 把一段文本按模式写入碎片。
- * 渐变模式：逐字符上色，渐变覆盖整段文字（渐变覆盖大于纯色，不留未着色字符）。
- * paraCtx（仅整段话循环使用）：{ index: 本片段在所属单元内的起始字符位置, total: 所属单元字符总数 }；
- * 不传时默认按本片段自身长度计算，即每个片段各自走完一遍色标。
- */
-function writeSegment(fragment, text, cfg, counterRef, catKey, paraCtx) {
-    if (!text) return;
-    if (cfg.mode === 'theme') {
-        fragment.appendChild(document.createTextNode(text));
-        return;
-    }
-    if (cfg.mode === 'solid') {
-        const span = document.createElement('span');
-        span.className = 'stfc-char stfc-tagged';
-        span.dataset.stfcCat = catKey;
-        span.style.color = cfg.solid;
-        span.textContent = text;
-        fragment.appendChild(span);
-        counterRef.value += text.length;
-        return;
-    }
-    // gradient —— 两种循环方式：整段话一循环 / 自定义字符长度循环
-    const stops = cfg.gradient.map(hexToRgb);
-    const len = text.length;
-    if (cfg.cycle === 'paragraph') {
-        // 整段话循环：所属单元首字到尾字走完一遍色标
-        const total = paraCtx && paraCtx.total > 0 ? paraCtx.total : len;
-        const start = paraCtx ? paraCtx.index : 0;
-        for (let i = 0; i < len; i++) {
-            const p = total > 1 ? (start + i) / (total - 1) : 0;
-            const color = gradientColor(stops, p);
-            const span = document.createElement('span');
-            span.className = 'stfc-char stfc-tagged';
-            span.dataset.stfcCat = catKey;
-            span.style.color = rgbStr(color);
-            span.textContent = text[i];
-            fragment.appendChild(span);
-        }
-        return;
-    }
-    // 字符长度循环：每 cycleLength 个字一个循环
-    const cycleLen = Number.isFinite(cfg.cycleLength) && cfg.cycleLength >= 2 ? Math.floor(cfg.cycleLength) : CYCLE_LENGTH;
-    for (let i = 0; i < len; i++) {
-        const p = (counterRef.value % cycleLen) / cycleLen;
-        const color = gradientColor(stops, p);
-        const span = document.createElement('span');
-        span.className = 'stfc-char stfc-tagged';
-        span.dataset.stfcCat = catKey;
-        span.style.color = rgbStr(color);
-        span.textContent = text[i];
-        fragment.appendChild(span);
-        counterRef.value++;
-    }
-}
-
-/** 处理特殊元素类别（斜体 / 下划线 / 引用容器）；整段话循环以「本元素（本句话）」为单位 */
-function applyToElements(root, selector, catKey, cfg) {
-    root.querySelectorAll(selector).forEach((el) => {
-        if (el.closest('.mes_reasoning')) return;
-        el.classList.add('stfc-tagged');
-        if (cfg.mode === 'theme') {
-            el.style.removeProperty('color');
-            return;
-        }
-        if (cfg.mode === 'solid') {
-            el.style.color = cfg.solid;
-            return;
-        }
-        // 元素内部需要处理的文本节点（元素内部再出现引用容器时跟随引用样式）
-        const nodes = collectTextNodes(el).filter(
-            (node) => !(node.parentElement.closest('q, blockquote') && catKey !== 'quote'),
-        );
-        const counter = { value: 0 };
-        if (cfg.cycle === 'paragraph') {
-            // 整段话循环：本元素全部字符共享一条梯度，不按文本节点重置
-            const total = nodes.reduce((n, node) => n + node.textContent.length, 0);
-            const para = { index: 0, total };
-            nodes.forEach((node) => {
-                const fragment = document.createDocumentFragment();
-                writeSegment(fragment, node.textContent, cfg, counter, catKey, para);
-                para.index += node.textContent.length;
-                node.parentNode.replaceChild(fragment, node);
-            });
-            return;
-        }
-        // 字符长度循环：元素内部逐字符连续计数
-        nodes.forEach((node) => {
-            const fragment = document.createDocumentFragment();
-            writeSegment(fragment, node.textContent, cfg, counter, catKey);
-            node.parentNode.replaceChild(fragment, node);
-        });
-    });
-}
-
-/** 双引号对话切分：“...” 与 "..." 归入引用类别 */
-const QUOTE_RE = /[“"]([^”"]+)[”"]/g;
-
-/** 整段话循环的自然段归属：优先 `<p>`，无段落标签时回退到最近的块级 div */
-function paragraphKey(node) {
-    const p = node.parentElement.closest('p');
-    if (p) return p;
-    const div = node.parentElement.closest('div');
-    return div || node.parentElement;
-}
-
-/** 把一段文本切分为 main / quote 片段 */
-function splitQuoteParts(text) {
-    const parts = [];
-    let last = 0;
-    let m;
-    QUOTE_RE.lastIndex = 0;
-    while ((m = QUOTE_RE.exec(text)) !== null) {
-        if (m.index > last) parts.push({ text: text.slice(last, m.index), cat: 'main' });
-        parts.push({ text: m[0], cat: 'quote' });
-        last = m.index + m[0].length;
-    }
-    if (last < text.length) parts.push({ text: text.slice(last), cat: 'main' });
-    return parts;
-}
-
-function processMainText(root, cats) {
-    const mainCfg = cats.main;
-    const mainCounter = { value: 0 };
-    const quoteCounter = { value: 0 };
-
-    if (mainCfg.mode === 'solid') {
-        root.style.color = mainCfg.solid;
-        root.classList.add('stfc-tagged');
-    }
-
-    const nodes = collectTextNodes(root).filter((node) => categoryOf(node) === 'main');
-    const entries = nodes.map((node) => ({ node, parts: splitQuoteParts(node.textContent) }));
-
-    // 整段话循环：按自然段统计主要文本字符总数，段内被引号打断也不重置梯度
-    let paraTotals = null;
-    if (mainCfg.mode === 'gradient' && mainCfg.cycle === 'paragraph') {
-        paraTotals = new Map();
-        for (const entry of entries) {
-            const key = paragraphKey(entry.node);
-            const mainLen = entry.parts
-                .filter((part) => part.cat === 'main')
-                .reduce((n, part) => n + part.text.length, 0);
-            paraTotals.set(key, (paraTotals.get(key) || 0) + mainLen);
-        }
-    }
-    const paraIndex = new Map();
-
-    entries.forEach(({ node, parts }) => {
-        if (parts.length === 1 && parts[0].cat === 'main') {
-            if (mainCfg.mode === 'gradient') {
-                const fragment = document.createDocumentFragment();
-                if (mainCfg.cycle === 'paragraph') {
-                    const key = paragraphKey(node);
-                    const total = paraTotals.get(key) || 1;
-                    const idx = paraIndex.get(key) || 0;
-                    writeSegment(fragment, parts[0].text, mainCfg, mainCounter, 'main', { index: idx, total });
-                    paraIndex.set(key, idx + parts[0].text.length);
-                } else {
-                    writeSegment(fragment, parts[0].text, mainCfg, mainCounter, 'main');
-                }
-                node.parentNode.replaceChild(fragment, node);
-            }
-            // solid / theme：沿用容器颜色，不包裹
-            return;
-        }
-
-        const fragment = document.createDocumentFragment();
-        const key = mainCfg.cycle === 'paragraph' ? paragraphKey(node) : null;
-        parts.forEach((part) => {
-            if (part.cat === 'quote') {
-                // 引号对话以「本句话（本引号片段）」为单位各自走完色标
-                writeSegment(fragment, part.text, cats.quote, quoteCounter, 'quote');
-                return;
-            }
-            if (mainCfg.mode === 'gradient') {
-                if (mainCfg.cycle === 'paragraph') {
-                    const total = paraTotals.get(key) || 1;
-                    const idx = paraIndex.get(key) || 0;
-                    writeSegment(fragment, part.text, mainCfg, mainCounter, 'main', { index: idx, total });
-                    paraIndex.set(key, idx + part.text.length);
-                } else {
-                    writeSegment(fragment, part.text, mainCfg, mainCounter, 'main');
-                }
-            } else {
-                // solid / theme：沿用容器颜色，不包裹
-                fragment.appendChild(document.createTextNode(part.text));
-            }
-        });
-        node.parentNode.replaceChild(fragment, node);
     });
 }
 
@@ -430,10 +282,14 @@ function processMainText(root, cats) {
 export function applyToRoot(root) {
     resetRoot(root);
     if (!state.settings.enabled) return;
-    applyToElements(root, 'i, em', 'italic', state.settings.categories.italic);
-    applyToElements(root, 'u, ins', 'underline', state.settings.categories.underline);
-    applyToElements(root, 'q, blockquote', 'quote', state.settings.categories.quote);
-    processMainText(root, state.settings.categories);
+    const cats = state.settings.categories;
+    paintCategoryElements(root, 'i, em', cats.italic);
+    paintCategoryElements(root, 'u, ins', cats.underline);
+    paintCategoryElements(root, 'q, blockquote', cats.quote);
+    // 主要文本：整段根容器一把渐变 / 纯色，内部子元素各自优先使用自己的配色
+    paintElement(root, cats.main);
+    // 主要文本里裸写的双引号对话包一层引用色
+    wrapBareQuotes(root, cats.quote);
 }
 
 /** 当前设置指纹：设置未变化时已染色消息直接跳过，避免长聊天反复重建 DOM */
@@ -441,7 +297,7 @@ export function settingsSignature() {
     const s = state.settings;
     const parts = Object.keys(CATEGORY_META).map((key) => {
         const c = s.categories[key];
-        return [key, c.mode, c.solid, c.gradient.join(','), c.cycle, c.cycleLength].join('|');
+        return [key, c.mode, c.solid, c.gradient.join(','), c.angle].join('|');
     });
     return `${s.enabled ? '1' : '0'}:${parts.join(';')}`;
 }
