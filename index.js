@@ -48,12 +48,9 @@ function renderStopPickers(catKey) {
         row.className = 'sct-stop-row';
         const valid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color);
         const hex = valid ? color.toLowerCase() : '#888888';
-        const input = document.createElement('input');
-        input.type = 'color';
-        input.className = 'sct-gradient-stop';
+        const input = createColorPicker(hex, 'sct-gradient-stop');
         input.dataset.cat = catKey;
         input.dataset.idx = idx;
-        input.value = hex;
         const hexInput = document.createElement('input');
         hexInput.type = 'text';
         hexInput.className = 'sct-hex sct-stop-hex';
@@ -104,25 +101,91 @@ function normalizeHex(raw) {
     return hex.toLowerCase();
 }
 
+/* -------------------------------------------------------------------------- */
+/* 取色器适配层：优先使用酒馆自带的 <toolcool-color-picker> 组件（与主题色面板同款
+   的调色盘 + 色相条 + 透明条 + Hex/R/G/B/A，无建议预设页、无「取消 / 设置」模态
+   弹窗）；当前酒馆版本未注册该组件时回退原生 <input type="color">，保证旧版本可用。 */
+/* -------------------------------------------------------------------------- */
+
+const TOOLCOOL_TAG = 'toolcool-color-picker';
+
+/** 当前环境是否已注册酒馆自带的 toolcool 取色组件 */
+function hasToolcoolPicker() {
+    return typeof customElements !== 'undefined' && Boolean(customElements.get(TOOLCOOL_TAG));
+}
+
+/** 判断取色器是否为 toolcool 组件 */
+function isToolcool(picker) {
+    return Boolean(picker) && picker.tagName === TOOLCOOL_TAG.toUpperCase();
+}
+
+/** 创建取色器按钮：组件优先，未注册时回退原生 color input */
+function createColorPicker(hex, className) {
+    if (hasToolcoolPicker()) {
+        const picker = document.createElement(TOOLCOOL_TAG);
+        picker.setAttribute('color', hex);
+        // 面板位于右侧栏，popup 向右对齐按钮右缘、向左展开，避免被栏宽裁掉
+        picker.setAttribute('popup-position', 'right');
+        picker.setAttribute('button-height', '1.9em');
+        picker.className = className;
+        return picker;
+    }
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = className;
+    picker.value = hex;
+    return picker;
+}
+
+/** 读取取色器当前颜色，返回归一化 6 位小写 hex；非法回退 #888888 */
+function pickerColor(picker) {
+    const raw = isToolcool(picker)
+        ? (picker.hex || picker.getAttribute('color') || '')
+        : picker.value;
+    return normalizeHex(raw) || '#888888';
+}
+
+/** 回写取色器颜色（6 位 hex） */
+function setPickerColor(picker, hex) {
+    if (isToolcool(picker)) {
+        picker.setAttribute('color', hex);
+    } else {
+        picker.value = hex;
+    }
+}
+
+/** 绑定取色器颜色变更：组件为 change 事件，原生为 input 事件；回调回传归一化 hex */
+function onPickerChange(picker, handler) {
+    const listener = () => handler(pickerColor(picker));
+    if (isToolcool(picker)) {
+        picker.addEventListener('change', listener);
+    } else {
+        picker.addEventListener('input', listener);
+    }
+}
+
 /** 取色器与色号输入框双向同步；applyHex 写入设置并刷新，getCurrentHex 用于失焦还原 */
 function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     if (!picker || !hexInput) return;
     let applyTimer = null;
-    const scheduleApply = () => {
+    // 组件连入 DOM 时会按初始色派发一次 change，忽略该次初始化回写；原生 input 无此事件
+    let skipFirst = isToolcool(picker);
+    const scheduleApply = (hexVal) => {
         if (applyTimer) clearTimeout(applyTimer);
-        applyTimer = setTimeout(() => applyHex(picker.value), 200);
+        applyTimer = setTimeout(() => applyHex(hexVal), 200);
     };
-    picker.addEventListener('input', () => {
-        hexInput.value = picker.value;
+    onPickerChange(picker, (hexVal) => {
+        if (skipFirst) { skipFirst = false; return; }
+        hexInput.value = hexVal;
         hexInput.classList.remove('invalid');
-        scheduleApply();
+        scheduleApply(hexVal);
     });
     hexInput.addEventListener('input', () => {
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.classList.remove('invalid');
-            picker.value = norm;
-            scheduleApply();
+            setPickerColor(picker, norm);
+            scheduleApply(norm);
         } else {
             hexInput.classList.add('invalid');
         }
@@ -132,12 +195,12 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.value = norm;
-            picker.value = norm;
+            setPickerColor(picker, norm);
             applyHex(norm);
         } else {
             const current = normalizeHex(getCurrentHex());
             hexInput.value = current || getCurrentHex();
-            if (current) picker.value = current;
+            if (current) setPickerColor(picker, current);
             hexInput.classList.remove('invalid');
         }
     });
@@ -181,7 +244,7 @@ function renderPanel() {
         <div class="sct-solid-row" data-cat="${catKey}">
             <span>纯色颜色</span>
             <div class="sct-color-control">
-                <input type="color" class="sct-solid" data-cat="${catKey}" />
+                <span class="sct-solid-slot" data-cat="${catKey}"></span>
                 <input type="text" class="sct-hex sct-solid-hex" data-cat="${catKey}" maxlength="7" spellcheck="false" autocomplete="off" />
             </div>
         </div>
@@ -217,13 +280,14 @@ function renderPanel() {
     panel.querySelector('.sct-cycle-length').value = cfg.cycleLength;
     showRowsByMode(panel, cfg, catKey);
 
-    // 纯色取色器
+    // 纯色取色器（组件优先，未注册时回退原生 color input）
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
     const solidHex = solidOk ? cfg.solid.toLowerCase() : '#888888';
-    panel.querySelector('.sct-solid').value = solidHex;
+    const solidPicker = createColorPicker(solidHex, 'sct-solid');
+    panel.querySelector('.sct-solid-slot').replaceChildren(solidPicker);
     panel.querySelector('.sct-solid-hex').value = solidHex;
     bindColorPair(
-        panel.querySelector('.sct-solid'),
+        solidPicker,
         panel.querySelector('.sct-solid-hex'),
         (hexVal) => {
             cfg.solid = hexVal;
