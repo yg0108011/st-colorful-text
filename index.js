@@ -143,7 +143,7 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-/** 根据模式显示对应的设置行；字符数输入框仅「字符长度循环」显示 */
+/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示 */
 function showRowsByMode(panel, cfg) {
     panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
     panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
@@ -162,6 +162,8 @@ function renderPanel() {
 
     const catKey = activeCat;
     const cfg = Engine.getSettings().categories[catKey];
+    // 主要文本按「段落」循环，斜体 / 下划线 / 引用按「句子」循环；后端取值统一为 paragraph
+    const paragraphLabel = catKey === 'main' ? '段落' : '句子';
     const panel = list.querySelector('.sct-tab-panel');
     panel.innerHTML = `
         <label class="sct-mode-row">
@@ -191,8 +193,8 @@ function renderPanel() {
             <label class="sct-cycle-row" data-cat="${catKey}">
                 <span>循环方式</span>
                 <select class="sct-cycle text_pole" data-cat="${catKey}">
-                    <option value="paragraph">整段话 / 本句话循环</option>
-                    <option value="length">字符长度循环</option>
+                    <option value="length">字符长度</option>
+                    <option value="paragraph">${paragraphLabel}</option>
                 </select>
             </label>
             <label class="sct-cycle-length-row" data-cat="${catKey}">
@@ -430,7 +432,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变支持整段话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）或字符长度循环（每 N 个字一个循环，2–999 可调）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持段落 / 句子循环（主要文本按段落，斜体 / 下划线 / 引用按句子）或字符长度（每 N 个字一个循环，2–999 可调）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
