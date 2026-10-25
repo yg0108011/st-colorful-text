@@ -48,9 +48,9 @@ function renderStopPickers(catKey) {
         row.className = 'sct-stop-row';
         const valid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color);
         const hex = valid ? color.toLowerCase() : '#888888';
-        const input = createColorPicker(hex, 'sct-gradient-stop');
-        input.dataset.cat = catKey;
-        input.dataset.idx = idx;
+        const picker = createColorPicker(hex, 'sct-gradient-stop');
+        picker.root.dataset.cat = catKey;
+        picker.root.dataset.idx = idx;
         const hexInput = document.createElement('input');
         hexInput.type = 'text';
         hexInput.className = 'sct-hex sct-stop-hex';
@@ -60,7 +60,7 @@ function renderStopPickers(catKey) {
         hexInput.maxLength = 7;
         hexInput.spellcheck = false;
         hexInput.autocomplete = 'off';
-        bindColorPair(input, hexInput, (hexVal) => {
+        bindColorPair(picker, hexInput, (hexVal) => {
             cfg.gradient[idx] = hexVal;
             saveSettings();
             updateGradientStrip(catKey);
@@ -74,7 +74,7 @@ function renderStopPickers(catKey) {
         remove.dataset.cat = catKey;
         remove.dataset.idx = idx;
         if (cfg.gradient.length <= 2) remove.classList.add('disabled');
-        row.append(input, hexInput, remove);
+        row.append(picker.root, hexInput, remove);
         box.append(row);
     });
     updateGradientStrip(catKey);
@@ -102,89 +102,254 @@ function normalizeHex(raw) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 取色器适配层：优先使用酒馆自带的 <toolcool-color-picker> 组件（与主题色面板同款
-   的调色盘 + 色相条 + 透明条 + Hex/R/G/B/A，无建议预设页、无「取消 / 设置」模态
-   弹窗）；当前酒馆版本未注册该组件时回退原生 <input type="color">，保证旧版本可用。 */
+/* 自绘取色盘：折叠色块按钮 + 点击后在该行下方展开的面板（SV 方块 + 色相条 +      */
+/* R/G/B 字段）。全部处于文档流内，不使用绝对定位浮层，避免被设置抽屉的滚动容器  */
+/* 横向裁剪；不依赖酒馆自定义元素，旧版本客户端同样可用。颜色仅存 6 位不透明 hex。 */
 /* -------------------------------------------------------------------------- */
 
-const TOOLCOOL_TAG = 'toolcool-color-picker';
-
-/** 当前环境是否已注册酒馆自带的 toolcool 取色组件 */
-function hasToolcoolPicker() {
-    return typeof customElements !== 'undefined' && Boolean(customElements.get(TOOLCOOL_TAG));
+function clamp255(n) {
+    return Math.min(255, Math.max(0, Math.round(Number(n) || 0)));
 }
 
-/** 判断取色器是否为 toolcool 组件 */
-function isToolcool(picker) {
-    return Boolean(picker) && picker.tagName === TOOLCOOL_TAG.toUpperCase();
+function clamp01(n) {
+    return Math.min(1, Math.max(0, Number(n) || 0));
 }
 
-/** 创建取色器按钮：组件优先，未注册时回退原生 color input */
+/** hex → [r, g, b]（0–255）；非法返回 null */
+function hexToRgbLocal(hex) {
+    const norm = normalizeHex(hex);
+    if (!norm) return null;
+    const n = parseInt(norm.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r, g, b) {
+    const c = (v) => clamp255(v).toString(16).padStart(2, '0');
+    return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+/** [r, g, b] → { h(0–360), s(0–1), v(0–1) } */
+function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+        if (h < 0) h += 360;
+    }
+    const s = max === 0 ? 0 : d / max;
+    return { h, s, v: max };
+}
+
+/** { h, s, v } → [r, g, b]（0–255） */
+function hsvToRgb(h, s, v) {
+    h = ((h % 360) + 360) % 360;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+/**
+ * 创建自绘取色盘。
+ * 返回 { root, button, panel, setColor, getHex, onChange, close, toggle }。
+ */
 function createColorPicker(hex, className) {
-    if (hasToolcoolPicker()) {
-        const picker = document.createElement(TOOLCOOL_TAG);
-        picker.setAttribute('color', hex);
-        // 面板位于右侧栏，popup 向右对齐按钮右缘、向左展开，避免被栏宽裁掉
-        picker.setAttribute('popup-position', 'right');
-        picker.setAttribute('button-height', '1.9em');
-        picker.className = className;
-        return picker;
+    const root = document.createElement('div');
+    root.className = `sct-cp ${className || ''}`;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sct-cp-button';
+    button.title = '点击展开 / 收起调色盘';
+
+    const panel = document.createElement('div');
+    panel.className = 'sct-cp-panel';
+    panel.hidden = true;
+    panel.innerHTML = `
+        <div class="sct-cp-sv" data-part="sv">
+            <div class="sct-cp-sv-white"></div>
+            <div class="sct-cp-sv-black"></div>
+            <div class="sct-cp-sv-handler"></div>
+        </div>
+        <div class="sct-cp-hue" data-part="hue">
+            <div class="sct-cp-hue-handler"></div>
+        </div>
+        <div class="sct-cp-fields">
+            <label class="sct-cp-field"><span>R</span><input type="number" min="0" max="255" data-chan="r" /></label>
+            <label class="sct-cp-field"><span>G</span><input type="number" min="0" max="255" data-chan="g" /></label>
+            <label class="sct-cp-field"><span>B</span><input type="number" min="0" max="255" data-chan="b" /></label>
+        </div>`;
+
+    root.append(button, panel);
+
+    const sv = panel.querySelector('[data-part="sv"]');
+    const svHandler = panel.querySelector('.sct-cp-sv-handler');
+    const hue = panel.querySelector('[data-part="hue"]');
+    const hueHandler = panel.querySelector('.sct-cp-hue-handler');
+    const chanInputs = [...panel.querySelectorAll('input[data-chan]')];
+
+    let hsv = { h: 0, s: 1, v: 1 };
+    let currentHex = '#888888';
+    let changeHandler = null;
+
+    function emit() {
+        if (typeof changeHandler === 'function') changeHandler(currentHex);
     }
-    const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.className = className;
-    picker.value = hex;
-    return picker;
-}
 
-/** 读取取色器当前颜色，返回归一化 6 位小写 hex；非法回退 #888888 */
-function pickerColor(picker) {
-    const raw = isToolcool(picker)
-        ? (picker.hex || picker.getAttribute('color') || '')
-        : picker.value;
-    return normalizeHex(raw) || '#888888';
-}
-
-/** 回写取色器颜色（6 位 hex） */
-function setPickerColor(picker, hex) {
-    if (isToolcool(picker)) {
-        picker.setAttribute('color', hex);
-    } else {
-        picker.value = hex;
+    function currentRgb() {
+        return hsvToRgb(hsv.h, hsv.s, hsv.v);
     }
-}
 
-/** 绑定取色器颜色变更：组件为 change 事件，原生为 input 事件；回调回传归一化 hex */
-function onPickerChange(picker, handler) {
-    const listener = () => handler(pickerColor(picker));
-    if (isToolcool(picker)) {
-        picker.addEventListener('change', listener);
-    } else {
-        picker.addEventListener('input', listener);
+    function refreshUi() {
+        const [r, g, b] = currentRgb();
+        currentHex = rgbToHex(r, g, b);
+        button.style.backgroundColor = currentHex;
+        const base = hsvToRgb(hsv.h, 1, 1);
+        sv.style.backgroundColor = `rgb(${base[0]}, ${base[1]}, ${base[2]})`;
+        svHandler.style.left = `${hsv.s * 100}%`;
+        svHandler.style.top = `${(1 - hsv.v) * 100}%`;
+        hueHandler.style.left = `${(hsv.h / 360) * 100}%`;
+        const chanMap = { r, g, b };
+        chanInputs.forEach((inp) => {
+            if (document.activeElement === inp) return;
+            inp.value = chanMap[inp.dataset.chan];
+        });
     }
+
+    /** 程序化设置颜色：只刷新内部状态与界面，不触发 onChange，避免反向回写色号框形成回环 */
+    function setColor(hexVal) {
+        const rgb = hexToRgbLocal(hexVal);
+        if (!rgb) return;
+        hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        refreshUi();
+    }
+
+    function setFromRgb(r, g, b) {
+        hsv = rgbToHsv(clamp255(r), clamp255(g), clamp255(b));
+        refreshUi();
+        emit();
+    }
+
+    // 指针 / 触摸拖动：按下时临时绑定到 window，抬起即解绑，避免面板重建后监听器残留
+    function bindDrag(zone, onPoint) {
+        let active = false;
+        const move = (ev) => {
+            if (!active) return;
+            ev.preventDefault();
+            onPoint(ev);
+        };
+        const up = () => {
+            active = false;
+            window.removeEventListener('mousemove', move);
+            window.removeEventListener('touchmove', move);
+            window.removeEventListener('mouseup', up);
+            window.removeEventListener('touchend', up);
+        };
+        zone.addEventListener('mousedown', (ev) => {
+            active = true;
+            onPoint(ev);
+            window.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', up);
+            ev.preventDefault();
+        });
+        zone.addEventListener('touchstart', (ev) => {
+            active = true;
+            onPoint(ev);
+            window.addEventListener('touchmove', move, { passive: false });
+            window.addEventListener('touchend', up);
+            ev.preventDefault();
+        }, { passive: false });
+    }
+
+    bindDrag(sv, (ev) => {
+        const rect = sv.getBoundingClientRect();
+        const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        hsv.s = clamp01((x - rect.left) / rect.width);
+        hsv.v = 1 - clamp01((y - rect.top) / rect.height);
+        refreshUi();
+        emit();
+    });
+
+    bindDrag(hue, (ev) => {
+        const rect = hue.getBoundingClientRect();
+        const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        hsv.h = clamp01((x - rect.left) / rect.width) * 360;
+        refreshUi();
+        emit();
+    });
+
+    // R / G / B 数字字段
+    chanInputs.forEach((inp) => {
+        const chan = inp.dataset.chan;
+        inp.addEventListener('input', () => {
+            const n = Number.parseInt(inp.value, 10);
+            if (!Number.isFinite(n) || n < 0 || n > 255) return;
+            const [r, g, b] = currentRgb();
+            const rgb = [r, g, b];
+            rgb[chan === 'r' ? 0 : chan === 'g' ? 1 : 2] = n;
+            setFromRgb(rgb[0], rgb[1], rgb[2]);
+        });
+        inp.addEventListener('blur', () => {
+            const [r, g, b] = currentRgb();
+            inp.value = chan === 'r' ? r : chan === 'g' ? g : b;
+        });
+    });
+
+    const close = () => { panel.hidden = true; };
+    const toggle = () => { panel.hidden = !panel.hidden; };
+    button.addEventListener('click', toggle);
+
+    setColor(hex);
+
+    return {
+        root, button, panel,
+        setColor,
+        getHex: () => currentHex,
+        onChange: (fn) => { changeHandler = fn; },
+        close, toggle,
+    };
 }
 
-/** 取色器与色号输入框双向同步；applyHex 写入设置并刷新，getCurrentHex 用于失焦还原 */
+/**
+ * 绑定「自绘取色盘 + 色号文本框」双向同步。
+ * 取色盘变更时，若用户正在色号框内输入则不回写，避免程序化赋值打断选区、形成删字回环。
+ * applyHex(hexVal) 写入设置并刷新；getCurrentHex() 读取当前配置色号用于失焦还原。
+ */
 function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     if (!picker || !hexInput) return;
     let applyTimer = null;
-    // 组件连入 DOM 时会按初始色派发一次 change，忽略该次初始化回写；原生 input 无此事件
-    let skipFirst = isToolcool(picker);
     const scheduleApply = (hexVal) => {
         if (applyTimer) clearTimeout(applyTimer);
         applyTimer = setTimeout(() => applyHex(hexVal), 200);
     };
-    onPickerChange(picker, (hexVal) => {
-        if (skipFirst) { skipFirst = false; return; }
-        hexInput.value = hexVal;
-        hexInput.classList.remove('invalid');
+    picker.onChange((hexVal) => {
+        if (document.activeElement !== hexInput) {
+            hexInput.value = hexVal;
+            hexInput.classList.remove('invalid');
+        }
         scheduleApply(hexVal);
     });
     hexInput.addEventListener('input', () => {
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.classList.remove('invalid');
-            setPickerColor(picker, norm);
+            picker.setColor(norm); // setColor 不触发 onChange，切断回环
             scheduleApply(norm);
         } else {
             hexInput.classList.add('invalid');
@@ -195,12 +360,12 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
         const norm = normalizeHex(hexInput.value);
         if (norm) {
             hexInput.value = norm;
-            setPickerColor(picker, norm);
+            picker.setColor(norm);
             applyHex(norm);
         } else {
             const current = normalizeHex(getCurrentHex());
             hexInput.value = current || getCurrentHex();
-            if (current) setPickerColor(picker, current);
+            if (current) picker.setColor(current);
             hexInput.classList.remove('invalid');
         }
     });
@@ -280,11 +445,11 @@ function renderPanel() {
     panel.querySelector('.sct-cycle-length').value = cfg.cycleLength;
     showRowsByMode(panel, cfg, catKey);
 
-    // 纯色取色器（组件优先，未注册时回退原生 color input）
+    // 纯色取色器（自绘面板内展开的调色盘）
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
     const solidHex = solidOk ? cfg.solid.toLowerCase() : '#888888';
     const solidPicker = createColorPicker(solidHex, 'sct-solid');
-    panel.querySelector('.sct-solid-slot').replaceChildren(solidPicker);
+    panel.querySelector('.sct-solid-slot').replaceChildren(solidPicker.root);
     panel.querySelector('.sct-solid-hex').value = solidHex;
     bindColorPair(
         solidPicker,
@@ -352,6 +517,14 @@ function bindUI() {
     }
 
     const list = document.getElementById('sct-category-list');
+
+    // 点击取色盘面板外部时收起已展开的面板（统一委托，避免每个取色器常驻 document 监听）
+    list.addEventListener('mousedown', (ev) => {
+        list.querySelectorAll('.sct-cp-panel:not([hidden])').forEach((panel) => {
+            const root = panel.closest('.sct-cp');
+            if (root && !root.contains(ev.target)) panel.hidden = true;
+        });
+    });
 
     // 配色模式切换（切模式后重建面板以显示/隐藏对应行）
     list.addEventListener('change', (ev) => {
