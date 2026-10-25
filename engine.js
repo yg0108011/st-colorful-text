@@ -505,14 +505,35 @@ function messageHash(textEl) {
     return `${text.length}|${text.slice(0, 80)}`;
 }
 
-/** 处理单条消息：设置与文本都未变化则跳过，避免重复包裹 */
+/** 是否配置了任一自定义（纯色 / 渐变）类别；全为「跟随主题」时本扩展本就不产生染色产物 */
+function hasCustomColor() {
+    return Object.values(state.settings.categories).some((c) => c.mode !== 'theme');
+}
+
+/**
+ * 染色产物是否已被外部清空：
+ * 酒馆生成结束、切换滑条或重新渲染 Markdown 时会替换 `.mes_text` 的 innerHTML，
+ * 把本扩展写入的包裹与内联样式整体冲掉；此时即便设置指纹与文本指纹都未变化，
+ * 也必须强制重染，否则消息会退回酒馆默认色。
+ */
+function needsRepaint(textEl) {
+    if (!state.settings.enabled || !hasCustomColor()) return false;
+    return !textEl.querySelector('.stfc-tagged, .stfc-char, .stfc-quote-wrap');
+}
+
+/** 处理单条消息：设置、文本均未变化且染色产物仍在则跳过；产物被外部清空时强制重染 */
 export function processMessage(mesEl) {
     if (mesEl.dataset.stfcSkipped === '1') return;
+    if (!state.settings.enabled) return;
     const textEl = mesEl.querySelector('.mes_text');
     if (!textEl) return;
     const sig = settingsSignature();
     const hash = messageHash(textEl);
-    if (mesEl.dataset.stfcSig === sig && mesEl.dataset.stfcHash === hash) return;
+    if (
+        mesEl.dataset.stfcSig === sig &&
+        mesEl.dataset.stfcHash === hash &&
+        !needsRepaint(textEl)
+    ) return;
     applyToRoot(textEl);
     mesEl.dataset.stfcSig = sig;
     mesEl.dataset.stfcHash = hash;
