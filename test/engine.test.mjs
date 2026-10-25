@@ -1,7 +1,7 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
  * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、
- * 跳过标签、设置归一化、整段话循环与字符长度循环。
+ * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底。
  * paragraph 循环：CSS 原生 linear-gradient(angle) + background-clip: text；
  * length 循环：逐字符插值上色，每 cycleLength 字走完一遍色标。
  */
@@ -218,6 +218,51 @@ test('重复应用两次：包裹数量不变，无嵌套，无残留内联样�
     const after = document.querySelectorAll('span.stfc-quote-wrap').length;
     assert.equal(after, before);
     assert.equal(document.querySelectorAll('span.stfc-quote-wrap span.stfc-quote-wrap').length, 0);
+});
+
+/* ---------------- 结束重绘兜底（流式结束退回默认色回归） ---------------- */
+
+test('生成结束重绘清空染色后：指纹相同仍强制重染，不再退回酒馆默认色', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff'], 90);
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 90);
+
+    const mes = document.querySelector('#m1');
+    const text = mes.querySelector('.mes_text');
+    // 染色前缓存原始内部 HTML，用来模拟酒馆结束时重新生成的那份 DOM
+    const rawInner = text.innerHTML;
+    engine.processAll(document);
+    assert.ok(text.querySelector('.stfc-tagged'), '首次染色应产生本扩展标记');
+
+    // 模拟酒馆结束时替换 innerHTML：mesEl 元素与指纹保留，仅内部 DOM 被重绘清空
+    text.innerHTML = rawInner;
+    assert.equal(text.querySelector('.stfc-tagged, .stfc-char, .stfc-quote-wrap'), null, '重绘后染色产物已丢失');
+
+    // 文本长度与前 80 字符未变、设置指纹相同；旧逻辑会跳过，修复后应检测到产物丢失并重染
+    engine.processAll(document);
+    assert.ok(text.querySelector('.stfc-tagged'), '产物丢失时即使指纹相同也必须强制重染');
+    mainParagraphs(text).forEach((p) => {
+        assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
+    });
+    assert.ok(text.querySelector('i').style.backgroundImage.includes('linear-gradient(90deg'));
+});
+
+test('全主题模式：无自定义配色时不产生包裹与内联样式，重复处理也不染色', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    engine.processAll(document);
+    engine.processAll(document);
+    const text = document.querySelector('#m1 .mes_text');
+    assert.equal(text.querySelectorAll('span.stfc-char, span.stfc-quote-wrap').length, 0);
+    ['i', 'u', 'q', 'blockquote'].forEach((sel) => {
+        text.querySelectorAll(sel).forEach((el) => {
+            assert.equal(el.style.color, '');
+            assert.ok(!el.style.backgroundImage, `${sel} 主题模式不应设置背景`);
+        });
+    });
 });
 
 /* ---------------- 跳过标签 ---------------- */
