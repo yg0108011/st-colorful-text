@@ -49,8 +49,8 @@ function renderStopPickers(catKey) {
         const valid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color);
         const hex = valid ? color.toLowerCase() : '#888888';
         const picker = createColorPicker(hex, 'sct-gradient-stop');
-        picker.root.dataset.cat = catKey;
-        picker.root.dataset.idx = idx;
+        picker.wrap.dataset.cat = catKey;
+        picker.wrap.dataset.idx = idx;
         const hexInput = document.createElement('input');
         hexInput.type = 'text';
         hexInput.className = 'sct-hex sct-stop-hex';
@@ -74,7 +74,7 @@ function renderStopPickers(catKey) {
         remove.dataset.cat = catKey;
         remove.dataset.idx = idx;
         if (cfg.gradient.length <= 2) remove.classList.add('disabled');
-        row.append(picker.root, hexInput, remove);
+        row.append(picker.wrap, hexInput, remove, picker.panel);
         box.append(row);
     });
     updateGradientStrip(catKey);
@@ -166,16 +166,19 @@ function hsvToRgb(h, s, v) {
 
 /**
  * 创建自绘取色盘。
- * 返回 { root, button, panel, setColor, getHex, onChange, close, toggle }。
+ * wrap 只折叠色块按钮；panel 为独立面板元素，由调用方挂到色块所在行 / 整行下方，
+ * 展开时独占一行，不与色号框、删除叉并排造成错位。
+ * 返回 { wrap, button, panel, setColor, getHex, onChange, close, toggle }。
  */
 function createColorPicker(hex, className) {
-    const root = document.createElement('div');
-    root.className = `sct-cp ${className || ''}`;
+    const wrap = document.createElement('div');
+    wrap.className = `sct-cp ${className || ''}`;
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'sct-cp-button';
     button.title = '点击展开 / 收起调色盘';
+    wrap.append(button);
 
     const panel = document.createElement('div');
     panel.className = 'sct-cp-panel';
@@ -194,8 +197,7 @@ function createColorPicker(hex, className) {
             <label class="sct-cp-field"><span>G</span><input type="number" min="0" max="255" data-chan="g" /></label>
             <label class="sct-cp-field"><span>B</span><input type="number" min="0" max="255" data-chan="b" /></label>
         </div>`;
-
-    root.append(button, panel);
+    panel._wrap = wrap;
 
     const sv = panel.querySelector('[data-part="sv"]');
     const svHandler = panel.querySelector('.sct-cp-sv-handler');
@@ -311,14 +313,17 @@ function createColorPicker(hex, className) {
         });
     });
 
-    const close = () => { panel.hidden = true; };
-    const toggle = () => { panel.hidden = !panel.hidden; };
+    const close = () => { panel.hidden = true; wrap.classList.remove('open'); };
+    const toggle = () => {
+        panel.hidden = !panel.hidden;
+        wrap.classList.toggle('open', !panel.hidden);
+    };
     button.addEventListener('click', toggle);
 
     setColor(hex);
 
     return {
-        root, button, panel,
+        wrap, button, panel,
         setColor,
         getHex: () => currentHex,
         onChange: (fn) => { changeHandler = fn; },
@@ -445,12 +450,13 @@ function renderPanel() {
     panel.querySelector('.sct-cycle-length').value = cfg.cycleLength;
     showRowsByMode(panel, cfg, catKey);
 
-    // 纯色取色器（自绘面板内展开的调色盘）
+    // 纯色取色器（点色块在整行下方展开的调色盘）
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
     const solidHex = solidOk ? cfg.solid.toLowerCase() : '#888888';
     const solidPicker = createColorPicker(solidHex, 'sct-solid');
-    panel.querySelector('.sct-solid-slot').replaceChildren(solidPicker.root);
+    panel.querySelector('.sct-solid-slot').replaceChildren(solidPicker.wrap);
     panel.querySelector('.sct-solid-hex').value = solidHex;
+    panel.querySelector('.sct-solid-row').append(solidPicker.panel);
     bindColorPair(
         solidPicker,
         panel.querySelector('.sct-solid-hex'),
@@ -521,8 +527,10 @@ function bindUI() {
     // 点击取色盘面板外部时收起已展开的面板（统一委托，避免每个取色器常驻 document 监听）
     list.addEventListener('mousedown', (ev) => {
         list.querySelectorAll('.sct-cp-panel:not([hidden])').forEach((panel) => {
-            const root = panel.closest('.sct-cp');
-            if (root && !root.contains(ev.target)) panel.hidden = true;
+            if (!panel.contains(ev.target)) {
+                panel.hidden = true;
+                panel._wrap && panel._wrap.classList.remove('open');
+            }
         });
     });
 
