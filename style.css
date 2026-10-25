@@ -106,47 +106,132 @@
     flex: 0 1 auto;
 }
 
-/* 颜色选择器：跟随主题边框与配色 */
-.sct-settings-block input[type="color"] {
-    appearance: none;
-    -webkit-appearance: none;
-    background: transparent;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 6px;
+/* --------------------------------------------------------------------------
+   自绘取色盘：折叠色块按钮 + 行内展开面板（SV 方块 + 色相条 + R/G/B 字段）。
+   面板处于文档流内，不做绝对定位浮层，避免被设置抽屉的滚动容器横向裁剪。
+   -------------------------------------------------------------------------- */
+
+.sct-cp {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.sct-cp-button {
     width: 3em;
     height: 1.9em;
-    padding: 0.15em;
+    padding: 0;
+    background: #888;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    cursor: pointer;
+    box-sizing: border-box;
+    line-height: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.sct-cp-panel {
+    width: 200px;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    box-sizing: border-box;
+}
+
+.sct-cp-sv {
+    position: relative;
+    width: 100%;
+    height: 7.5rem;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: crosshair;
+    background: hsl(0, 100%, 50%);
+}
+
+.sct-cp-sv-white {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, #fff, hsla(0, 0%, 100%, 0));
+}
+
+.sct-cp-sv-black {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(0deg, #000, transparent);
+}
+
+.sct-cp-sv-handler {
+    position: absolute;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.sct-cp-hue {
+    position: relative;
+    width: 100%;
+    height: 0.625rem;
+    border-radius: 3px;
+    background: linear-gradient(90deg, red 0, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, red 100%);
     cursor: pointer;
 }
 
-.sct-settings-block input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
+.sct-cp-hue-handler {
+    position: absolute;
+    top: 50%;
+    width: 0.5rem;
+    height: 0.9rem;
+    border-radius: 3px;
+    border: 1px solid #fff;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }
 
-.sct-settings-block input[type="color"]::-webkit-color-swatch {
-    border: none;
-    border-radius: 4px;
+.sct-cp-fields {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
 }
 
-.sct-settings-block input[type="color"]::-moz-color-swatch {
-    border: none;
-    border-radius: 4px;
+.sct-cp-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.8em;
+    color: var(--SmartThemeEmColor);
 }
 
-/* 酒馆自带 toolcool-color-picker 组件（纯色 / 渐变色标共用，与主题色面板同款）：
-   对齐中线，按钮与弹窗边框、背景套用本主题变量；旧版本回退原生 input 时走上方规则。 */
-toolcool-color-picker.sct-solid,
-toolcool-color-picker.sct-gradient-stop {
-    display: inline-block;
-    line-height: 0;
-    vertical-align: middle;
-    --tool-cool-color-picker-btn-bg: transparent;
-    --tool-cool-color-picker-btn-border-color: var(--SmartThemeBorderColor);
-    --tool-cool-color-picker-btn-border-color-inner: var(--SmartThemeBorderColor);
-    --tool-cool-color-picker-btn-border-radius: 6px;
-    --tool-cool-color-picker-btn-border-radius-inner: 4px;
-    --tool-cool-color-picker-popup-bg: var(--black10a, rgba(255, 255, 255, 0.05));
-    --tool-cool-color-picker-popup-border-color: var(--SmartThemeBorderColor);
+.sct-cp-field input {
+    width: 100%;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0.2em 0.4em;
+    box-sizing: border-box;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.sct-cp-field input::-webkit-outer-spin-button,
+.sct-cp-field input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 /* 取色器 + 色号输入框组合 */
@@ -403,6 +488,17 @@ span.stfc-char {
     .sct-hex {
         flex: 1;
         min-width: 0;
+    }
+
+    /* 取色盘展开面板固定宽度，不超出窄屏；stop 行允许换行 */
+    .sct-stop-row {
+        flex-wrap: wrap;
+    }
+
+    .sct-cp-panel {
+        min-width: 0;
+        width: 200px;
+        max-width: 100%;
     }
 
     /* 手机上 tab 文字略缩，保证四个能放下 */
