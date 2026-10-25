@@ -368,6 +368,7 @@ function bindUI() {
 
 let observer = null;
 let rafId = null;
+let endTimers = [];
 
 function scheduleProcess() {
     if (rafId) cancelAnimationFrame(rafId);
@@ -384,17 +385,34 @@ function scheduleProcess() {
     });
 }
 
+/**
+ * 生成结束后延迟二次巡检：酒馆最终 Markdown 渲染有时晚于 GENERATION_ENDED 事件触发，
+ * 事件回调里立即染色后 innerHTML 又被替换会冲掉染色；分两次延迟补染兜底。
+ */
+function scheduleLateRepaint() {
+    endTimers.forEach((t) => clearTimeout(t));
+    endTimers = [300, 700].map((delay) => setTimeout(() => scheduleProcess(), delay));
+}
+
 function setupEvents() {
     const handled = [
         'APP_READY', 'CHAT_LOADED', 'MESSAGE_RECEIVED', 'MESSAGE_EDITED',
         'MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'MORE_MESSAGES_LOADED',
-        'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED', 'GENERATION_ENDED',
+        'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED',
         'CHAT_CHANGED', 'MESSAGE_SENT',
     ];
     handled.forEach((name) => {
         const type = event_types && event_types[name];
         if (type) eventSource.on(type, () => scheduleProcess());
     });
+
+    // 生成结束：立即处理一次，再延迟补染两次，覆盖酒馆异步最终渲染窗口
+    if (event_types && event_types.GENERATION_ENDED) {
+        eventSource.on(event_types.GENERATION_ENDED, () => {
+            scheduleProcess();
+            scheduleLateRepaint();
+        });
+    }
 
     const chatEl = document.getElementById('chat');
     if (chatEl && !observer) {
