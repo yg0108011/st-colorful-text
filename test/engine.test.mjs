@@ -1,7 +1,9 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
- * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、跳过标签、设置归一化。
- * 渐变渲染为 CSS 原生 linear-gradient(angle) + background-clip: text。
+ * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、
+ * 跳过标签、设置归一化、整段话循环与字符长度循环。
+ * paragraph 循环：CSS 原生 linear-gradient(angle) + background-clip: text；
+ * length 循环：逐字符插值上色，每 cycleLength 字走完一遍色标。
  */
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
@@ -48,6 +50,13 @@ function setMode(cat, mode, solid, gradient, angle) {
     if (angle !== undefined) cfg.angle = angle;
 }
 
+/** paragraph 循环下主要文本对应的自然段（与引擎 paintMainParagraphs 选择口径一致） */
+function mainParagraphs(text) {
+    return [...text.querySelectorAll('p')].filter(
+        (p) => !p.closest('blockquote, q, i, em, u, ins'),
+    );
+}
+
 /* ---------------- 主题模式 ---------------- */
 
 test('主题模式：不产生任何染色包裹与内联颜色', async () => {
@@ -91,9 +100,9 @@ test('纯色模式：四类元素分别套用纯色，双引号对话归入引�
     plainQuoteSpans.forEach((sp) => assert.equal(sp.style.color, 'rgb(255, 165, 0)'));
 });
 
-/* ---------------- 渐变模式 ---------------- */
+/* ---------------- 渐变 paragraph 循环 ---------------- */
 
-test('渐变模式：主要文本根容器带 linear-gradient 背景与 text 裁剪', async () => {
+test('渐变 paragraph 循环：主要文本按自然段铺渐变，根容器本身不铺', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
@@ -104,11 +113,16 @@ test('渐变模式：主要文本根容器带 linear-gradient 背景与 text 裁
     engine.processAll(document);
 
     const text = document.querySelector('#m1 .mes_text');
-    assert.ok(text.style.backgroundImage.includes('linear-gradient(90deg'));
-    assert.ok(text.style.backgroundImage.includes('rgb(255, 0, 0)'));
-    assert.ok(text.style.backgroundImage.includes('rgb(0, 0, 255)'));
-    assert.equal(text.style.webkitTextFillColor, 'transparent');
-    assert.equal(text.style.color, 'transparent');
+    assert.ok(!text.style.backgroundImage, 'paragraph 循环下根容器不直接铺渐变');
+    const paras = mainParagraphs(text);
+    assert.ok(paras.length >= 1, '应至少选中一个主要文本自然段');
+    paras.forEach((p) => {
+        assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
+        assert.ok(p.style.backgroundImage.includes('rgb(255, 0, 0)'));
+        assert.ok(p.style.backgroundImage.includes('rgb(0, 0, 255)'));
+        assert.equal(p.style.webkitTextFillColor, 'transparent');
+        assert.equal(p.style.color, 'transparent');
+    });
 });
 
 test('渐变角度：不同角度写入不同 deg，0/180/270 均可', async () => {
@@ -124,7 +138,7 @@ test('渐变角度：不同角度写入不同 deg，0/180/270 均可', async () 
     assert.ok(text.querySelector('u').style.backgroundImage.includes('linear-gradient(0deg'));
 });
 
-test('渐变模式：斜体/下划线/引用元素各自带渐变背景，双引号对话包裹', async () => {
+test('渐变 paragraph 循环：斜体/下划线/引用元素各自带渐变背景，双引号对话包裹', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
@@ -145,7 +159,49 @@ test('渐变模式：斜体/下划线/引用元素各自带渐变背景，双引
     wraps.forEach((sp) => assert.ok(sp.style.backgroundImage.includes('linear-gradient(90deg')));
 });
 
-/* ---------------- 幂等性 ---------------- */
+/* ---------------- 渐变 length 循环 ---------------- */
+
+test('渐变 length 循环：逐字符插值，每 cycleLength 字走完一遍色标', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    const mainCfg = engine.getSettings().categories.main;
+    mainCfg.mode = 'gradient';
+    mainCfg.cycle = 'length';
+    mainCfg.cycleLength = 4;
+    mainCfg.gradient = ['#ff0000', '#0000ff'];
+    engine.processAll(document);
+
+    const text = document.querySelector('#m1 .mes_text');
+    const chars = text.querySelectorAll('span.stfc-char[data-stfc-cat="main"]');
+    assert.ok(chars.length > 0, 'length 循环应把主要文本逐字符包裹');
+    // 计数器连续：第 0、4、8… 字回到起始色红
+    assert.equal(chars[0].style.color, 'rgb(255, 0, 0)');
+    assert.equal(chars[4].style.color, 'rgb(255, 0, 0)');
+    // 中间位置为两色插值，既非纯红也非纯蓝
+    const mid = chars[2].style.color;
+    assert.notEqual(mid, 'rgb(255, 0, 0)');
+    assert.notEqual(mid, 'rgb(0, 0, 255)');
+});
+
+test('length 循环重复应用：字符包裹数量不变、无嵌套', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    const mainCfg = engine.getSettings().categories.main;
+    mainCfg.mode = 'gradient';
+    mainCfg.cycle = 'length';
+    mainCfg.cycleLength = 10;
+    engine.processAll(document);
+    const before = document.querySelectorAll('span.stfc-char').length;
+    engine.processAll(document);
+    engine.processAll(document);
+    const after = document.querySelectorAll('span.stfc-char').length;
+    assert.equal(after, before);
+    assert.equal(document.querySelectorAll('span.stfc-char span.stfc-char').length, 0);
+});
+
+/* ---------------- 幂等性（paragraph） ---------------- */
 
 test('重复应用两次：包裹数量不变，无嵌套，无残留内联样式', async () => {
     await loadEngine();
@@ -182,7 +238,7 @@ test('代码/链接/加粗不被染色', async () => {
 
 /* ---------------- 设置归一化 ---------------- */
 
-test('normalizeSettings：非法模式回退主题，过短渐变回退默认，角度校验，旧字段清理', async () => {
+test('normalizeSettings：非法模式回退主题，过短渐变回退默认，角度校验，循环字段归一化', async () => {
     await loadEngine();
     const bad = {
         enabled: 'yes',
@@ -190,6 +246,7 @@ test('normalizeSettings：非法模式回退主题，过短渐变回退默认，
             main: { mode: 'rainbow', solid: '#123456', gradient: ['#abc'], angle: 'abc' },
             italic: { mode: 'solid', solid: '#00ff00', angle: 400 },
             quote: { angle: -90, cycle: 'paragraph', cycleLength: 5000 },
+            underline: { cycle: 'weird', cycleLength: 1 },
         },
     };
     const norm = engine.normalizeSettings(bad);
@@ -201,8 +258,10 @@ test('normalizeSettings：非法模式回退主题，过短渐变回退默认，
     assert.equal(norm.categories.italic.angle, 40); // 400° 归一化到 40°
     assert.equal(norm.categories.quote.mode, 'theme');
     assert.equal(norm.categories.quote.angle, 270); // -90° 归一化到 270°
-    assert.equal(norm.categories.quote.cycle, undefined); // 旧字段已清理
-    assert.equal(norm.categories.quote.cycleLength, undefined);
+    assert.equal(norm.categories.quote.cycle, 'paragraph'); // 合法循环方式保留
+    assert.equal(norm.categories.quote.cycleLength, 30); // 5000 超出 2–999，回退默认 30
+    assert.equal(norm.categories.underline.cycle, 'paragraph'); // 非法循环方式回退
+    assert.equal(norm.categories.underline.cycleLength, 30); // 1 低于下限，回退默认 30
 });
 
 /* ---------------- 角度工具 ---------------- */
