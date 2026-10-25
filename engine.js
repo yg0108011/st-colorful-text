@@ -249,13 +249,17 @@ function collectMainQuoteNodes(root) {
 }
 
 /** CSS 方案：把元素按类别配置上色（theme 还原主题 / solid 纯色 / gradient 角度渐变） */
-function paintElement(el, cfg) {
+function paintElement(el, cfg, catKey) {
     el.classList.add('stfc-tagged');
     el.style.removeProperty('color');
     el.style.removeProperty('background-image');
     el.style.removeProperty('-webkit-background-clip');
     el.style.removeProperty('background-clip');
     el.style.removeProperty('-webkit-text-fill-color');
+    // 清除上一轮可能写入的斜体背景盒补偿，保证切换类别 / 模式后不残留
+    el.style.removeProperty('padding');
+    el.style.removeProperty('margin');
+    el.style.removeProperty('background-origin');
     if (cfg.mode === 'solid') {
         el.style.color = cfg.solid;
         // 阻断父级渐变元素 -webkit-text-fill-color: transparent 的继承泄漏：
@@ -271,6 +275,14 @@ function paintElement(el, cfg) {
         el.style.backgroundClip = 'text';
         el.style.webkitTextFillColor = 'transparent';
         el.style.color = 'transparent';
+        // 斜体（<i>/<em>）是 inline 元素，字形合成倾斜向右上伸出，而背景盒按未倾斜的字符盒计算，
+        // 末字右侧伸出的笔画落在背景盒外、透出深色背景，看起来像被裁掉一节；
+        // 左右各留 0.16em 水平余量外扩背景盒，负 margin 抵消对行宽与换行的影响。
+        if (catKey === 'italic') {
+            el.style.padding = '0 0.16em';
+            el.style.margin = '0 -0.16em';
+            el.style.backgroundOrigin = 'border-box';
+        }
         return;
     }
     // theme：颜色完全跟随酒馆主题；同样阻断父级渐变透明继承，避免透明填充盖掉主题色
@@ -278,10 +290,10 @@ function paintElement(el, cfg) {
 }
 
 /** CSS 方案：处理特殊元素类别（斜体 / 下划线 / 引用容器），本元素一把渐变 */
-function paintCategoryElements(root, selector, cfg) {
+function paintCategoryElements(root, selector, cfg, catKey) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        paintElement(el, cfg);
+        paintElement(el, cfg, catKey);
     });
 }
 
@@ -463,6 +475,9 @@ export function resetRoot(root) {
         el.style.removeProperty('background-clip');
         el.style.removeProperty('-webkit-text-fill-color');
         el.style.removeProperty('text-shadow');
+        el.style.removeProperty('padding');
+        el.style.removeProperty('margin');
+        el.style.removeProperty('background-origin');
     });
 }
 
@@ -482,7 +497,7 @@ function applyCategory(root, selector, catKey, cfg) {
     if (cfg.mode === 'gradient' && cfg.cycle === 'length') {
         applyElementsByLength(root, selector, catKey, cfg);
     } else {
-        paintCategoryElements(root, selector, cfg);
+        paintCategoryElements(root, selector, cfg, catKey);
     }
 }
 
