@@ -1,7 +1,7 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
  * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、
- * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底。
+ * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底、透明继承阻断。
  * paragraph 循环：CSS 原生 linear-gradient(angle) + background-clip: text；
  * length 循环：逐字符插值上色，每 cycleLength 字走完一遍色标。
  */
@@ -98,6 +98,40 @@ test('纯色模式：四类元素分别套用纯色，双引号对话归入引�
     const plainQuoteSpans = text.querySelectorAll('span.stfc-quote-wrap');
     assert.ok(plainQuoteSpans.length >= 2, '普通文本中的双引号对话应被切分包裹');
     plainQuoteSpans.forEach((sp) => assert.equal(sp.style.color, 'rgb(255, 165, 0)'));
+});
+
+/* ---------------- 透明继承阻断（段落渐变下子元素发黑回归） ---------------- */
+
+test('段落渐变下 theme 斜体与 solid 子元素阻断透明继承，不再发黑缺色', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff0000', '#0000ff'], 90);
+    setMode('italic', 'theme');
+    setMode('underline', 'solid', '#00ff00');
+    setMode('quote', 'theme');
+    engine.processAll(document);
+
+    const text = document.querySelector('#m1 .mes_text');
+    const i = text.querySelector('i');
+    const u = text.querySelector('u');
+    const block = text.querySelector('blockquote');
+
+    // theme 子元素：填充色跟随 currentColor，不继承父级 transparent，也不铺渐变背景
+    assert.equal(i.style.webkitTextFillColor, 'currentcolor');
+    assert.equal(i.style.backgroundImage, '');
+    assert.equal(block.style.webkitTextFillColor, 'currentcolor');
+    assert.equal(block.style.backgroundImage, '');
+
+    // solid 子元素：纯色 + currentColor 填充，透明继承不会盖掉纯色
+    assert.equal(u.style.color, 'rgb(0, 255, 0)');
+    assert.equal(u.style.webkitTextFillColor, 'currentcolor');
+
+    // 主段落仍是透明文字 + 渐变背景
+    mainParagraphs(text).forEach((p) => {
+        assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
+        assert.equal(p.style.webkitTextFillColor, 'transparent');
+    });
 });
 
 /* ---------------- 渐变 paragraph 循环 ---------------- */
