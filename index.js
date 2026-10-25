@@ -143,12 +143,16 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示 */
-function showRowsByMode(panel, cfg) {
+/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示；斜体句子循环不支持角度 */
+function showRowsByMode(panel, cfg, catKey) {
     panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
     panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
     if (cfg.mode === 'gradient') {
         panel.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
+        // 斜体句子循环走整句逐字水平插值，角度滑杆不生效，隐藏该行
+        const angleRow = panel.querySelector('.sct-angle-row');
+        const angleHidden = catKey === 'italic' && cfg.cycle === 'paragraph';
+        if (angleRow) angleRow.style.display = angleHidden ? 'none' : 'flex';
     }
 }
 
@@ -211,7 +215,7 @@ function renderPanel() {
     panel.querySelector('.sct-mode').value = cfg.mode;
     panel.querySelector('.sct-cycle').value = cfg.cycle;
     panel.querySelector('.sct-cycle-length').value = cfg.cycleLength;
-    showRowsByMode(panel, cfg);
+    showRowsByMode(panel, cfg, catKey);
 
     // 纯色取色器
     const solidOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cfg.solid);
