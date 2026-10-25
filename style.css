@@ -133,6 +133,22 @@
     border-radius: 4px;
 }
 
+/* 酒馆自带 toolcool-color-picker 组件（纯色 / 渐变色标共用，与主题色面板同款）：
+   对齐中线，按钮与弹窗边框、背景套用本主题变量；旧版本回退原生 input 时走上方规则。 */
+toolcool-color-picker.sct-solid,
+toolcool-color-picker.sct-gradient-stop {
+    display: inline-block;
+    line-height: 0;
+    vertical-align: middle;
+    --tool-cool-color-picker-btn-bg: transparent;
+    --tool-cool-color-picker-btn-border-color: var(--SmartThemeBorderColor);
+    --tool-cool-color-picker-btn-border-color-inner: var(--SmartThemeBorderColor);
+    --tool-cool-color-picker-btn-border-radius: 6px;
+    --tool-cool-color-picker-btn-border-radius-inner: 4px;
+    --tool-cool-color-picker-popup-bg: var(--black10a, rgba(255, 255, 255, 0.05));
+    --tool-cool-color-picker-popup-border-color: var(--SmartThemeBorderColor);
+}
+
 /* 取色器 + 色号输入框组合 */
 .sct-color-control {
     display: flex;
