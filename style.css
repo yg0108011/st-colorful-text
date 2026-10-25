@@ -95,7 +95,9 @@
 .sct-mode-row > span,
 .sct-solid-row > span,
 .sct-gradient-head > span,
-.sct-angle-label {
+.sct-angle-label,
+.sct-cycle-row > span,
+.sct-cycle-length-row > span {
     color: var(--SmartThemeEmColor);
 }
 
@@ -207,6 +209,35 @@
     border-radius: 6px;
     border: 1px solid var(--SmartThemeBorderColor);
     background: var(--black10a, rgba(255, 255, 255, 0.05));
+}
+
+/* --------------------------------------------------------------------------
+   循环方式行：整段话 / 本句话循环 与 字符长度循环
+   -------------------------------------------------------------------------- */
+
+.sct-cycle-row,
+.sct-cycle-length-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sct-cycle-row select.sct-cycle {
+    min-width: 12em;
+    flex: 0 1 auto;
+}
+
+.sct-cycle-length {
+    width: 6em;
+    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0.2em 0.45em;
 }
 
 /* --------------------------------------------------------------------------
@@ -326,8 +357,9 @@
     opacity: 0.85;
 }
 
-/* 裸引号对话包裹 span：仅颜色变化，不产生任何布局偏移 */
-span.stfc-quote-wrap {
+/* 裸引号对话包裹 span 与逐字符包裹 span：仅颜色变化，不产生任何布局偏移 */
+span.stfc-quote-wrap,
+span.stfc-char {
     display: inline;
     white-space: inherit;
 }
@@ -335,16 +367,20 @@ span.stfc-quote-wrap {
 /* 窄屏（手机端）适配 */
 @media screen and (max-width: 720px) {
     .sct-mode-row,
-    .sct-solid-row {
+    .sct-solid-row,
+    .sct-cycle-row,
+    .sct-cycle-length-row {
         flex-direction: column;
         align-items: flex-start;
     }
 
-    .sct-mode-row select.sct-mode {
+    .sct-mode-row select.sct-mode,
+    .sct-cycle-row select.sct-cycle {
         width: 100%;
     }
 
-    .sct-color-control {
+    .sct-color-control,
+    .sct-cycle-length {
         width: 100%;
     }
 

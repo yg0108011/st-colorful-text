@@ -143,10 +143,13 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-/** 根据模式显示对应的设置行 */
+/** 根据模式显示对应的设置行；字符数输入框仅「字符长度循环」显示 */
 function showRowsByMode(panel, cfg) {
     panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
     panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
+    if (cfg.mode === 'gradient') {
+        panel.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
+    }
 }
 
 /** 渲染当前激活分类的设置面板（每次切 tab 或切模式时重建） */
@@ -185,6 +188,17 @@ function renderPanel() {
             </div>
             <div class="sct-stops" data-cat="${catKey}"></div>
             <div class="sct-gradient-preview" data-cat="${catKey}"></div>
+            <label class="sct-cycle-row" data-cat="${catKey}">
+                <span>循环方式</span>
+                <select class="sct-cycle text_pole" data-cat="${catKey}">
+                    <option value="paragraph">整段话 / 本句话循环</option>
+                    <option value="length">字符长度循环</option>
+                </select>
+            </label>
+            <label class="sct-cycle-length-row" data-cat="${catKey}">
+                <span>循环字符数</span>
+                <input type="number" class="sct-cycle-length" data-cat="${catKey}" min="2" max="999" step="1" />
+            </label>
             <div class="sct-angle-row" data-cat="${catKey}">
                 <span class="sct-angle-label">渐变角度</span>
                 <input type="range" class="sct-angle" min="0" max="360" step="1" data-cat="${catKey}" />
@@ -193,6 +207,8 @@ function renderPanel() {
         </div>`;
 
     panel.querySelector('.sct-mode').value = cfg.mode;
+    panel.querySelector('.sct-cycle').value = cfg.cycle;
+    panel.querySelector('.sct-cycle-length').value = cfg.cycleLength;
     showRowsByMode(panel, cfg);
 
     // 纯色取色器
@@ -275,13 +291,31 @@ function bindUI() {
             saveSettings();
             renderPanel();
             refreshAll();
+            return;
+        }
+        // 循环方式切换：paragraph / length 重建面板以显示/隐藏字符数输入框
+        if (ev.target.classList.contains('sct-cycle')) {
+            const catKey = ev.target.dataset.cat;
+            Engine.getSettings().categories[catKey].cycle = ev.target.value;
+            saveSettings();
+            renderPanel();
+            refreshAll();
         }
     });
 
-    // 角度滑杆
+    // 角度滑杆 + 循环字符数输入
     list.addEventListener('input', (ev) => {
         if (ev.target.classList.contains('sct-angle')) {
             setAngle(ev.target.dataset.cat, ev.target.value);
+            return;
+        }
+        if (ev.target.classList.contains('sct-cycle-length')) {
+            const catKey = ev.target.dataset.cat;
+            const cfg = Engine.getSettings().categories[catKey];
+            const n = Number.parseInt(ev.target.value, 10);
+            cfg.cycleLength = Number.isFinite(n) && n >= 2 && n <= 999 ? n : 2;
+            saveSettings();
+            refreshAll();
         }
     });
 
@@ -396,7 +430,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变模式使用 CSS 原生线性渐变，角度 0–360° 任意可调（0° 自下而上、90° 自左而右、180° 自上而下）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持整段话循环（主要文本按自然段，斜体 / 下划线 / 引用按本句话）或字符长度循环（每 N 个字一个循环，2–999 可调）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
