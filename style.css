@@ -107,21 +107,20 @@
 }
 
 /* --------------------------------------------------------------------------
-   自绘取色盘：折叠色块按钮 + 行内展开面板（SV 方块 + 色相条 + R/G/B 字段）。
-   面板处于文档流内，不做绝对定位浮层，避免被设置抽屉的滚动容器横向裁剪。
+   自绘取色盘：折叠状态为小色块 + 色号框 + 删除叉一行整齐排列；点击色块后在
+   该行下方独占一行展开选色面板（SV 大方块 + 色相条 + R/G/B 字段）。面板处于
+   文档流内，不做绝对定位浮层，避免被设置抽屉的滚动容器横向裁剪。
    -------------------------------------------------------------------------- */
 
+/* 折叠色块容器：仅包裹按钮，不参与面板布局 */
 .sct-cp {
-    position: relative;
     display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+    align-items: center;
 }
 
 .sct-cp-button {
-    width: 3em;
-    height: 1.9em;
+    width: 2.8em;
+    height: 1.85em;
     padding: 0;
     background: #888;
     border: 1px solid var(--SmartThemeBorderColor);
@@ -133,24 +132,30 @@
     -webkit-appearance: none;
 }
 
+/* 展开面板：作为所在行的直接子项，flex-basis 100% 强制换行到整行下方 */
+.sct-cp-panel[hidden] {
+    display: none;
+}
+
 .sct-cp-panel {
-    width: 200px;
-    min-width: 200px;
+    flex: 0 0 100%;
+    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px;
+    gap: 11px;
+    padding: 12px;
     border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 8px;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    border-radius: 10px;
+    background: rgba(16, 18, 24, 0.95);
     box-sizing: border-box;
+    margin-top: 2px;
 }
 
 .sct-cp-sv {
     position: relative;
     width: 100%;
-    height: 7.5rem;
-    border-radius: 6px;
+    height: 10rem;
+    border-radius: 8px;
     overflow: hidden;
     cursor: crosshair;
     background: hsl(0, 100%, 50%);
@@ -170,11 +175,11 @@
 
 .sct-cp-sv-handler {
     position: absolute;
-    width: 0.55rem;
-    height: 0.55rem;
+    width: 0.6rem;
+    height: 0.6rem;
     border-radius: 50%;
-    border: 1.5px solid #fff;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.6);
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
@@ -182,8 +187,8 @@
 .sct-cp-hue {
     position: relative;
     width: 100%;
-    height: 0.625rem;
-    border-radius: 3px;
+    height: 0.8rem;
+    border-radius: 4px;
     background: linear-gradient(90deg, red 0, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, red 100%);
     cursor: pointer;
 }
@@ -192,10 +197,10 @@
     position: absolute;
     top: 50%;
     width: 0.5rem;
-    height: 0.9rem;
+    height: 1.15rem;
     border-radius: 3px;
-    border: 1px solid #fff;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
@@ -203,26 +208,27 @@
 .sct-cp-fields {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+    gap: 12px;
 }
 
 .sct-cp-field {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     font-size: 0.8em;
     color: var(--SmartThemeEmColor);
 }
 
 .sct-cp-field input {
     width: 100%;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    text-align: center;
+    background: rgba(0, 0, 0, 0.35);
     border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 6px;
+    border-radius: 7px;
     color: var(--SmartThemeBodyColor);
     font: inherit;
     font-variant-numeric: tabular-nums;
-    padding: 0.2em 0.4em;
+    padding: 0.45em 0.3em;
     box-sizing: border-box;
     -moz-appearance: textfield;
     appearance: textfield;
@@ -234,7 +240,7 @@
     margin: 0;
 }
 
-/* 取色器 + 色号输入框组合 */
+/* 色块 + 色号输入框组合（折叠状态一行排列） */
 .sct-color-control {
     display: flex;
     align-items: center;
@@ -242,19 +248,19 @@
 }
 
 .sct-hex {
-    width: 7.6em;
-    background: var(--black10a, rgba(255, 255, 255, 0.05));
+    width: 6.4em;
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 6px;
     color: var(--SmartThemeBodyColor);
     font: inherit;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.95em;
-    padding: 0.2em 0.45em;
+    padding: 0.32em 0.55em;
 }
 
 .sct-stop-hex {
-    width: 6.8em;
+    width: 6.1em;
 }
 
 .sct-hex.invalid {
@@ -285,10 +291,24 @@
 .sct-stop-row {
     display: flex;
     align-items: center;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* 某一行展开选色盘时，该行独占整行宽度，面板随之占满整行 */
+.sct-stop-row:has(.sct-cp.open) {
+    flex: 0 0 100%;
 }
 
 .sct-remove-stop {
+    width: 1.9em;
+    height: 1.9em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--black10a, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
     color: var(--SmartThemeEmColor);
     cursor: pointer;
     opacity: 0.8;
@@ -490,14 +510,14 @@ span.stfc-char {
         min-width: 0;
     }
 
-    /* 取色盘展开面板固定宽度，不超出窄屏；stop 行允许换行 */
+    /* 取色盘展开面板独占整行，不超出窄屏；stop 行允许换行 */
     .sct-stop-row {
         flex-wrap: wrap;
     }
 
     .sct-cp-panel {
         min-width: 0;
-        width: 200px;
+        width: 100%;
         max-width: 100%;
     }
 
