@@ -258,6 +258,9 @@ function paintElement(el, cfg) {
     el.style.removeProperty('-webkit-text-fill-color');
     if (cfg.mode === 'solid') {
         el.style.color = cfg.solid;
+        // 阻断父级渐变元素 -webkit-text-fill-color: transparent 的继承泄漏：
+        // 填充色跟随 currentColor，否则透明会盖掉上面的纯色（末字 / 子元素发黑缺色）
+        el.style.webkitTextFillColor = 'currentColor';
         return;
     }
     if (cfg.mode === 'gradient') {
@@ -268,8 +271,10 @@ function paintElement(el, cfg) {
         el.style.backgroundClip = 'text';
         el.style.webkitTextFillColor = 'transparent';
         el.style.color = 'transparent';
+        return;
     }
-    // theme：不加任何内联样式，完全跟随酒馆主题
+    // theme：颜色完全跟随酒馆主题；同样阻断父级渐变透明继承，避免透明填充盖掉主题色
+    el.style.webkitTextFillColor = 'currentColor';
 }
 
 /** CSS 方案：处理特殊元素类别（斜体 / 下划线 / 引用容器），本元素一把渐变 */
