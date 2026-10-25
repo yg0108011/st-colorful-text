@@ -5,9 +5,9 @@
  *   theme    跟随酒馆主题
  *   solid    纯色自定义
  *   gradient 渐变，两种循环方式（四类独立设置）：
- *     paragraph 整段话循环：主要文本按自然段，斜体 / 下划线 / 引用按本元素（本句话），
+ *     paragraph 段落 / 句子循环：主要文本按段落，斜体 / 下划线 / 引用按本元素（句子），
  *              每个单元走完一遍 CSS 线性渐变（保留 0–360° 角度设置）；
- *     length    字符长度循环：每 cycleLength 个字走完一遍色标，逐字符插值上色。
+ *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
  */
 
 export const MODULE_NAME = 'st-colorful-text';
@@ -361,7 +361,7 @@ function splitQuoteParts(text) {
     return parts;
 }
 
-/** CSS 方案：整段话循环——主要文本按自然段分别一把渐变，段内子元素优先用自己的配色 */
+/** CSS 方案：段落 / 句子循环——主要文本按自然段分别一把渐变，段内子元素优先用自己的配色 */
 function paintMainParagraphs(root, cfg) {
     if (cfg.mode !== 'gradient') {
         paintElement(root, cfg);
