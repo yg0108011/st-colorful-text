@@ -1,7 +1,8 @@
 /**
  * 多彩文本引擎自动化测试（jsdom）
  * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、
- * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底、透明继承阻断。
+ * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底、透明继承阻断、
+ * 斜体句子渐变 inline 背景盒水平补偿（末字倾斜伸出笔画不被裁）。
  * paragraph 循环：CSS 原生 linear-gradient(angle) + background-clip: text；
  * length 循环：逐字符插值上色，每 cycleLength 字走完一遍色标。
  */
@@ -191,6 +192,57 @@ test('渐变 paragraph 循环：斜体/下划线/引用元素各自带渐变背�
     const wraps = text.querySelectorAll('span.stfc-quote-wrap');
     assert.ok(wraps.length >= 2);
     wraps.forEach((sp) => assert.ok(sp.style.backgroundImage.includes('linear-gradient(90deg')));
+});
+
+test('斜体句子渐变：inline 背景盒水平补偿，下划线/引用不补偿，切回主题后补偿清除', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    setMode('main', 'theme');
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 90);
+    setMode('underline', 'gradient', null, ['#0000ff', '#ff00ff'], 90);
+    setMode('quote', 'gradient', null, ['#ffa500', '#ff0000'], 90);
+    engine.processAll(document);
+
+    const text = document.querySelector('#m1 .mes_text');
+    const i = text.querySelector('i');
+    // 斜体：左右各 0.16em 外扩背景盒，负 margin 抵消行宽，避免末字倾斜伸出笔画被裁
+    assert.ok(i.style.padding.includes('0.16em'), '斜体渐变元素应加水平 padding 补偿');
+    assert.ok(i.style.margin.includes('-0.16em'), '斜体渐变元素应以负 margin 抵消行宽');
+    assert.equal(i.style.backgroundOrigin, 'border-box');
+    // 下划线 / 引用不是斜体，不写补偿
+    const u = text.querySelector('u');
+    assert.equal(u.style.padding, '');
+    assert.equal(u.style.margin, '');
+    assert.equal(u.style.backgroundOrigin, '');
+    const block = text.querySelector('blockquote');
+    assert.equal(block.style.padding, '');
+    assert.equal(block.style.margin, '');
+    assert.equal(block.style.backgroundOrigin, '');
+
+    // 幂等：斜体切回主题后补偿属性被清除，不残留
+    setMode('italic', 'theme');
+    engine.processAll(document);
+    assert.equal(i.style.padding, '');
+    assert.equal(i.style.margin, '');
+    assert.equal(i.style.backgroundOrigin, '');
+});
+
+test('斜体字符长度循环：逐字符方案不写 inline 背景盒补偿', async () => {
+    await loadEngine();
+    resetChat();
+    engine.resetSettings();
+    const italicCfg = engine.getSettings().categories.italic;
+    italicCfg.mode = 'gradient';
+    italicCfg.cycle = 'length';
+    italicCfg.cycleLength = 10;
+    italicCfg.gradient = ['#00ff00', '#ffff00'];
+    engine.processAll(document);
+    const text = document.querySelector('#m1 .mes_text');
+    const i = text.querySelector('i');
+    assert.equal(i.style.padding, '');
+    assert.equal(i.style.margin, '');
+    assert.equal(i.style.backgroundOrigin, '');
 });
 
 /* ---------------- 渐变 length 循环 ---------------- */
