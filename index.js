@@ -38,6 +38,16 @@ function refreshPreview() {
     Engine.applyToRoot(preview);
 }
 
+let previewRafId = null;
+/** 拖动 / 输入过程中用 rAF 合并预览刷新，避免一帧内重复重建预览 DOM */
+function schedulePreview() {
+    if (previewRafId) cancelAnimationFrame(previewRafId);
+    previewRafId = requestAnimationFrame(() => {
+        previewRafId = null;
+        refreshPreview();
+    });
+}
+
 function renderStopPickers(catKey) {
     const cfg = Engine.getSettings().categories[catKey];
     const box = document.querySelector(`.sct-stops[data-cat="${catKey}"]`);
@@ -498,7 +508,7 @@ function refreshAll() {
     refreshPreview();
 }
 
-function setAngle(catKey, rawValue) {
+function setAngle(catKey, rawValue, fullRepaint) {
     const cfg = Engine.getSettings().categories[catKey];
     cfg.angle = Engine.normalizeAngle(rawValue);
     saveSettings();
@@ -508,7 +518,13 @@ function setAngle(catKey, rawValue) {
         panel.querySelector('.sct-angle-deg').textContent = `${cfg.angle}°`;
     }
     updateGradientStrip(catKey);
-    refreshAll();
+    if (fullRepaint) {
+        // 松手后全量重绘聊天消息，最终配色与角度保持一致
+        refreshAll();
+    } else {
+        // 拖动过程中只更新预览条与面板预览，不清指纹、不拆解重建聊天消息，保证滑杆跟手
+        schedulePreview();
+    }
 }
 
 function bindUI() {
@@ -534,7 +550,7 @@ function bindUI() {
         });
     });
 
-    // 配色模式切换（切模式后重建面板以显示/隐藏对应行）
+    // 控件值变更（松手 / 失焦 / 选项切换）：此时才全量重绘聊天消息
     list.addEventListener('change', (ev) => {
         if (ev.target.classList.contains('sct-mode')) {
             const catKey = ev.target.dataset.cat;
@@ -551,13 +567,24 @@ function bindUI() {
             saveSettings();
             renderPanel();
             refreshAll();
+            return;
+        }
+        // 角度滑杆松手：拖动过程中已在 input 里轻量预览，此时全量重绘聊天
+        if (ev.target.classList.contains('sct-angle')) {
+            setAngle(ev.target.dataset.cat, ev.target.value, true);
+            return;
+        }
+        // 循环字符数输入框失焦：全量重绘聊天
+        if (ev.target.classList.contains('sct-cycle-length')) {
+            refreshAll();
         }
     });
 
-    // 角度滑杆 + 循环字符数输入
+    // 角度滑杆拖动 + 循环字符数输入：过程中只更新配置与面板预览，
+    // 不清指纹、不拆解重建聊天消息，避免高频全量重绘导致滑杆卡顿不跟手
     list.addEventListener('input', (ev) => {
         if (ev.target.classList.contains('sct-angle')) {
-            setAngle(ev.target.dataset.cat, ev.target.value);
+            setAngle(ev.target.dataset.cat, ev.target.value, false);
             return;
         }
         if (ev.target.classList.contains('sct-cycle-length')) {
@@ -566,7 +593,7 @@ function bindUI() {
             const n = Number.parseInt(ev.target.value, 10);
             cfg.cycleLength = Number.isFinite(n) && n >= 2 && n <= 999 ? n : 2;
             saveSettings();
-            refreshAll();
+            schedulePreview();
         }
     });
 
