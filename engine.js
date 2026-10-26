@@ -5,10 +5,8 @@
  *   theme    跟随酒馆主题
  *   solid    纯色自定义
  *   gradient 渐变，两种循环方式（四类独立设置）：
- *     paragraph 段落 / 句子循环：主要文本按段落、下划线 / 引用按本元素（句子），
+ *     paragraph 段落 / 句子循环：主要文本按段落、其余类别按本元素（句子），
  *              每个单元走完一遍 CSS 线性渐变（保留 0–360° 角度设置）；
- *              斜体句子改走整句一次 0→1 逐字符纯色插值，不使用背景裁剪，
- *              规避行末边界裁掉斜体右伸笔画（角度退化为水平方向）；
  *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
  */
 
@@ -350,60 +348,6 @@ function applyElementsByLength(root, selector, catKey, cfg) {
     });
 }
 
-/**
- * 斜体句子（paragraph）渐变专用写器：整句在该 <i>/<em> 内部一次性从色标起点走到终点（0→1），
- * 不按 cycleLength 重复；逐字符设纯色，不使用背景裁剪与透明填充，
- * 规避 background-clip:text 在 inline 行末边界裁掉斜体右伸笔画的问题。
- * stateRef 记录已写字数（index）与本元素总字数（total）。
- */
-function writeSentenceChars(fragment, text, cfg, stateRef) {
-    if (!text) return;
-    if (cfg.mode === 'theme') {
-        fragment.appendChild(document.createTextNode(text));
-        return;
-    }
-    if (cfg.mode === 'solid') {
-        const span = document.createElement('span');
-        span.className = 'stfc-char stfc-tagged';
-        span.dataset.stfcCat = 'italic';
-        span.style.color = cfg.solid;
-        span.textContent = text;
-        fragment.appendChild(span);
-        stateRef.index += text.length;
-        return;
-    }
-    const stops = cfg.gradient.map(hexToRgb);
-    for (let i = 0; i < text.length; i++) {
-        const p = stateRef.total === 1 ? 1 : stateRef.index / (stateRef.total - 1);
-        const color = gradientColor(stops, p);
-        const span = document.createElement('span');
-        span.className = 'stfc-char stfc-tagged';
-        span.dataset.stfcCat = 'italic';
-        span.style.color = rgbStr(color);
-        span.textContent = text[i];
-        fragment.appendChild(span);
-        stateRef.index++;
-    }
-}
-
-/** 斜体句子渐变：每个 <i>/<em> 内部整句一次走完一遍色标，逐字符纯色上色 */
-function applyItalicSentence(root, cfg) {
-    root.querySelectorAll('i, em').forEach((el) => {
-        if (el.closest('.mes_reasoning')) return;
-        el.classList.add('stfc-tagged');
-        const nodes = collectTextNodes(el).filter(
-            (node) => !node.parentElement.closest('q, blockquote'),
-        );
-        const total = nodes.reduce((sum, n) => sum + n.textContent.length, 0);
-        const stateRef = { index: 0, total };
-        nodes.forEach((node) => {
-            const fragment = document.createDocumentFragment();
-            writeSentenceChars(fragment, node.textContent, cfg, stateRef);
-            node.parentNode.replaceChild(fragment, node);
-        });
-    });
-}
-
 /* -------------------------------------------------------------------------- */
 /* 主要文本与裸引号                                                            */
 /* -------------------------------------------------------------------------- */
@@ -540,12 +484,10 @@ export function applyToRoot(root) {
     processMainText(root, cats);
 }
 
-/** 类别分派：length 走逐字符方案；斜体句子渐变走整句一次逐字插值；其余走 CSS 方案 */
+/** 类别分派：length 走逐字符方案；其余（theme / solid / paragraph 渐变）走 CSS 方案 */
 function applyCategory(root, selector, catKey, cfg) {
     if (cfg.mode === 'gradient' && cfg.cycle === 'length') {
         applyElementsByLength(root, selector, catKey, cfg);
-    } else if (catKey === 'italic' && cfg.mode === 'gradient' && cfg.cycle === 'paragraph') {
-        applyItalicSentence(root, cfg);
     } else {
         paintCategoryElements(root, selector, cfg, catKey);
     }
