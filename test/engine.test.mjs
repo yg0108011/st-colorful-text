@@ -2,7 +2,8 @@
  * 多彩文本引擎自动化测试（jsdom）
  * 覆盖：主题/纯色/渐变三模式、渐变角度 0–360、四类标签、双引号对话、幂等重绘、
  * 跳过标签、设置归一化、段落/句子循环与字符长度循环、结束重绘兜底、透明继承阻断。
- * paragraph 循环：四类文本统一走 CSS 原生 linear-gradient(angle) + background-clip: text；
+ * paragraph 循环：主要文本 / 下划线 / 引用走 CSS 原生 linear-gradient(angle) + background-clip: text；
+ * 斜体句子为避免背景盒裁掉倾斜伸出笔画，整句逐字符按角度走向投影取色、直接写 color；
  * length 循环：逐字符插值上色，每 cycleLength 字走完一遍色标。
  */
 import { JSDOM } from 'jsdom';
@@ -159,7 +160,7 @@ test('渐变 paragraph 循环：主要文本按自然段铺渐变，根容器本
     });
 });
 
-test('渐变角度：四类 CSS 方案写入对应 deg，斜体句子同样铺背景渐变', async () => {
+test('渐变角度：下划线走 CSS 背景渐变写入 deg；斜体句子整句逐字符投影上色、不铺背景', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
@@ -168,15 +169,18 @@ test('渐变角度：四类 CSS 方案写入对应 deg，斜体句子同样铺�
     engine.processAll(document);
 
     const text = document.querySelector('#m1 .mes_text');
-    // 下划线 / 斜体都是 CSS 背景渐变，角度分别写入 deg
+    // 下划线仍是 CSS 背景渐变，角度写入 deg
     assert.ok(text.querySelector('u').style.backgroundImage.includes('linear-gradient(0deg'));
     const i = text.querySelector('i');
-    assert.ok(i.style.backgroundImage.includes('linear-gradient(180deg'));
-    assert.equal(i.style.webkitTextFillColor, 'transparent');
-    assert.equal(i.querySelector('span.stfc-char'), null, '斜体句子循环不再逐字符包裹');
+    // 斜体 180°（接近垂直走向）：整句逐字符取中间色，不铺背景、不用透明填充
+    assert.equal(i.style.backgroundImage, '');
+    assert.equal(i.style.webkitTextFillColor, '');
+    const chars = i.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]');
+    assert.ok(chars.length > 0, '斜体句子循环应逐字符包裹');
+    chars.forEach((ch) => assert.equal(ch.style.color, 'rgb(128, 255, 0)'));
 });
 
-test('渐变 paragraph 循环：四类文本铺 CSS 角度渐变，双引号对话包裹引用渐变', async () => {
+test('渐变 paragraph 循环：下划线/引用铺 CSS 角度渐变；斜体句子逐字符投影，双引号对话包裹引用渐变', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
@@ -187,13 +191,17 @@ test('渐变 paragraph 循环：四类文本铺 CSS 角度渐变，双引号对�
     engine.processAll(document);
 
     const text = document.querySelector('#m1 .mes_text');
-    // 斜体句子循环同样走 CSS 背景渐变 + 透明填充，不再逐字符包裹、不残留盒补偿
+    // 斜体句子循环：整句逐字符按水平走向取色，不铺背景、不用透明填充、无盒补偿
     const i = text.querySelector('i');
-    assert.ok(i.style.backgroundImage.includes('linear-gradient(90deg'));
-    assert.equal(i.style.webkitTextFillColor, 'transparent');
-    assert.equal(i.querySelector('span.stfc-char'), null);
+    const chars = i.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]');
+    assert.ok(chars.length > 0);
+    assert.equal(i.style.backgroundImage, '');
+    assert.equal(i.style.webkitTextFillColor, '');
     assert.equal(i.style.padding, '');
     assert.equal(i.style.margin, '');
+    // 90° 自左而右：首字起始色绿，末字结束色黄
+    assert.equal(chars[0].style.color, 'rgb(0, 255, 0)');
+    assert.equal(chars[chars.length - 1].style.color, 'rgb(255, 255, 0)');
     // 下划线 / 引用仍是 CSS 背景渐变
     assert.ok(text.querySelector('u').style.backgroundImage.includes('linear-gradient(90deg'));
     assert.ok(text.querySelector('blockquote').style.backgroundImage.includes('linear-gradient(90deg'));
@@ -204,7 +212,7 @@ test('渐变 paragraph 循环：四类文本铺 CSS 角度渐变，双引号对�
     wraps.forEach((sp) => assert.ok(sp.style.backgroundImage.includes('linear-gradient(90deg')));
 });
 
-test('斜体句子渐变走 CSS 角度渐变；下划线/引用同为 CSS 渐变；切回主题后产物清除', async () => {
+test('斜体句子逐字符投影上色；下划线/引用为 CSS 渐变；切回主题后产物清除', async () => {
     await loadEngine();
     resetChat();
     engine.resetSettings();
@@ -216,14 +224,16 @@ test('斜体句子渐变走 CSS 角度渐变；下划线/引用同为 CSS 渐变
 
     const text = document.querySelector('#m1 .mes_text');
     const i = text.querySelector('i');
-    // 斜体句子循环：CSS 背景渐变 + 透明填充，不逐字包裹、无盒补偿残留
-    assert.ok(i.style.backgroundImage.includes('linear-gradient(90deg'));
-    assert.equal(i.style.webkitTextFillColor, 'transparent');
-    assert.equal(i.style.color, 'transparent');
-    assert.equal(i.querySelector('span.stfc-char'), null);
+    // 斜体句子循环：逐字符写 color，不铺背景、不用透明填充、无盒补偿残留
+    const chars = i.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]');
+    assert.ok(chars.length > 0);
+    assert.equal(i.style.backgroundImage, '');
+    assert.equal(i.style.webkitTextFillColor, '');
+    assert.equal(i.style.color, '');
     assert.equal(i.style.padding, '');
     assert.equal(i.style.margin, '');
     assert.equal(i.style.backgroundOrigin, '');
+    assert.equal(chars[0].style.color, 'rgb(0, 255, 0)');
     // 下划线 / 引用仍是 CSS 背景渐变，不逐字包裹
     const u = text.querySelector('u');
     assert.ok(u.style.backgroundImage.includes('linear-gradient(90deg'));
@@ -231,7 +241,7 @@ test('斜体句子渐变走 CSS 角度渐变；下划线/引用同为 CSS 渐变
     const block = text.querySelector('blockquote');
     assert.ok(block.style.backgroundImage.includes('linear-gradient(90deg'));
 
-    // 幂等：斜体切回主题后背景渐变与内联颜色清空
+    // 幂等：斜体切回主题后逐字符包裹与内联颜色清空
     setMode('italic', 'theme');
     engine.processAll(document);
     assert.equal(i.querySelector('span.stfc-char'), null);
@@ -350,7 +360,7 @@ test('生成结束重绘清空染色后：指纹相同仍强制重染，不再�
         assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
     });
     const i = text.querySelector('i');
-    assert.ok(i.style.backgroundImage.includes('linear-gradient(90deg'), '重染后斜体应恢复背景渐变');
+    assert.ok(i.querySelector('span.stfc-char[data-stfc-cat="italic"]'), '重染后斜体应恢复逐字符上色');
 });
 
 test('全主题模式：无自定义配色时不产生包裹与内联样式，重复处理也不染色', async () => {
