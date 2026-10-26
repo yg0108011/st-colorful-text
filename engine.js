@@ -5,8 +5,9 @@
  *   theme    跟随酒馆主题
  *   solid    纯色自定义
  *   gradient 渐变，两种循环方式（四类独立设置）：
- *     paragraph 段落 / 句子循环：主要文本按段落、其余类别按本元素（句子），
- *              每个单元走完一遍 CSS 线性渐变（保留 0–360° 角度设置）；
+ *     paragraph 段落 / 句子循环：主要文本 / 下划线 / 引用按本单元走完一遍 CSS 线性渐变
+ *              （0–360° 角度生效）；斜体为避免 background-clip: text 背景盒裁掉合成
+ *              倾斜伸出的笔画，改为整句逐字符按角度走向投影取色、直接写 color，不铺背景。
  *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
  */
 
@@ -348,6 +349,55 @@ function applyElementsByLength(root, selector, catKey, cfg) {
     });
 }
 
+/**
+ * 斜体句子循环（paragraph）：整句逐字符按角度走向投影取色，直接写 color。
+ * 不铺背景渐变、不写透明填充与盒补偿，从机制上绕开 background-clip: text
+ * 背景盒裁掉合成倾斜伸出笔画的问题；水平 / 斜角走向按字符位置过渡，
+ * 接近垂直（0° / 180°）走向时单行内所有字取渐变中间色，均匀不偏色。
+ */
+function applyItalicSentence(root, cfg) {
+    const stops = cfg.gradient.map(hexToRgb);
+    const angle = normalizeAngle(cfg.angle);
+    const rad = (angle * Math.PI) / 180;
+    const dir = Math.sin(rad);
+    const horizontal = Math.abs(dir) >= 0.15;
+
+    root.querySelectorAll('i, em').forEach((el) => {
+        if (el.closest('.mes_reasoning')) return;
+        el.classList.add('stfc-tagged');
+        // 清理历史背景渐变 / 透明填充 / 盒补偿残留，保证逐字符 color 不被覆盖
+        el.style.removeProperty('color');
+        el.style.removeProperty('background-image');
+        el.style.removeProperty('-webkit-background-clip');
+        el.style.removeProperty('background-clip');
+        el.style.removeProperty('-webkit-text-fill-color');
+        el.style.removeProperty('padding');
+        el.style.removeProperty('margin');
+        el.style.removeProperty('background-origin');
+
+        const nodes = collectTextNodes(el);
+        const total = nodes.reduce((sum, n) => sum + n.textContent.length, 0);
+        let index = 0;
+        nodes.forEach((node) => {
+            const fragment = document.createDocumentFragment();
+            const text = node.textContent;
+            for (let i = 0; i < text.length; i++) {
+                const x = total > 1 ? index / (total - 1) : 0;
+                const p = horizontal ? (dir > 0 ? x : 1 - x) : 0.5;
+                const color = gradientColor(stops, p);
+                const span = document.createElement('span');
+                span.className = 'stfc-char stfc-tagged';
+                span.dataset.stfcCat = 'italic';
+                span.style.color = rgbStr(color);
+                span.textContent = text[i];
+                fragment.appendChild(span);
+                index++;
+            }
+            node.parentNode.replaceChild(fragment, node);
+        });
+    });
+}
+
 /* -------------------------------------------------------------------------- */
 /* 主要文本与裸引号                                                            */
 /* -------------------------------------------------------------------------- */
@@ -484,13 +534,17 @@ export function applyToRoot(root) {
     processMainText(root, cats);
 }
 
-/** 类别分派：length 走逐字符方案；其余（theme / solid / paragraph 渐变）走 CSS 方案 */
+/** 类别分派：length 走逐字符方案；斜体句子渐变走整句角度投影逐字符方案；其余走 CSS 方案 */
 function applyCategory(root, selector, catKey, cfg) {
     if (cfg.mode === 'gradient' && cfg.cycle === 'length') {
         applyElementsByLength(root, selector, catKey, cfg);
-    } else {
-        paintCategoryElements(root, selector, cfg, catKey);
+        return;
     }
+    if (catKey === 'italic' && cfg.mode === 'gradient' && cfg.cycle === 'paragraph') {
+        applyItalicSentence(root, cfg);
+        return;
+    }
+    paintCategoryElements(root, selector, cfg, catKey);
 }
 
 /** 当前设置指纹：设置未变化时已染色消息直接跳过，避免长聊天反复重建 DOM */
