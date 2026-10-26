@@ -376,13 +376,14 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示；段落 / 句子循环四类统一显示角度滑杆 */
+/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示；段落 / 句子循环角度滑杆始终可见 */
 function showRowsByMode(panel, cfg, catKey) {
     panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
     panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
     if (cfg.mode === 'gradient') {
         panel.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
-        // 段落 / 句子循环四类统一走 CSS 原生角度渐变，角度滑杆始终可见
+        // 角度滑杆始终可见：主要文本 / 下划线 / 引用走 CSS 原生角度渐变；
+        // 斜体句子由引擎按角度走向逐字符投影取色，水平 / 斜角方向同样受角度影响
         const angleRow = panel.querySelector('.sct-angle-row');
         if (angleRow) angleRow.style.display = 'flex';
     }
@@ -698,7 +699,7 @@ function buildFallbackPanelHtml() {
                     <button type="button" class="menu_button" id="sct-apply">应用到当前聊天</button>
                     <button type="button" class="menu_button" id="sct-reset">恢复默认颜色</button>
                 </div>
-                <div class="sct-note">渐变支持段落 / 句子循环（主要文本按段落，斜体 / 下划线 / 引用按句子）或字符长度（每 N 个字一个循环，2–999 可调）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
+                <div class="sct-note">渐变支持段落 / 句子循环（主要文本按段落，下划线 / 引用按句子；斜体句子逐字符按角度走向取色、笔画完整不被裁）或字符长度（每 N 个字一个循环，2–999 可调）；选择“跟随酒馆主题”时完全使用酒馆当前主题配色。</div>
             </div>
         </div>
     </div>`;
