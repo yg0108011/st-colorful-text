@@ -376,16 +376,15 @@ function bindColorPair(picker, hexInput, applyHex, getCurrentHex) {
     });
 }
 
-/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示；斜体句子循环不支持角度 */
+/** 根据模式显示对应的设置行；字符数输入框仅「字符长度」显示；段落 / 句子循环四类统一显示角度滑杆 */
 function showRowsByMode(panel, cfg, catKey) {
     panel.querySelector('.sct-solid-row').style.display = cfg.mode === 'solid' ? 'flex' : 'none';
     panel.querySelector('.sct-gradient-row').style.display = cfg.mode === 'gradient' ? 'flex' : 'none';
     if (cfg.mode === 'gradient') {
         panel.querySelector('.sct-cycle-length-row').style.display = cfg.cycle === 'length' ? 'flex' : 'none';
-        // 斜体句子循环走整句逐字水平插值，角度滑杆不生效，隐藏该行
+        // 段落 / 句子循环四类统一走 CSS 原生角度渐变，角度滑杆始终可见
         const angleRow = panel.querySelector('.sct-angle-row');
-        const angleHidden = catKey === 'italic' && cfg.cycle === 'paragraph';
-        if (angleRow) angleRow.style.display = angleHidden ? 'none' : 'flex';
+        if (angleRow) angleRow.style.display = 'flex';
     }
 }
 
