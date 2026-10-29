@@ -10,9 +10,10 @@
  *              倾斜伸出的笔画，改为整句逐字符按角度走向投影取色、直接写 color，不铺背景。
  *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
  *
- * 颜文字兼容：Markdown 会把颜文字里成对的星号误配对成斜体，生成只含符号 / 希腊 / 假名
- * 字形的 i / em 元素；这类不含汉字与英文单词的碎片不套用斜体配色，归还主要文本，
- * 让主文本渐变连续穿过，真正含汉字或英文单词的斜体独白仍走斜体配置。
+ * 颜文字兼容：Markdown 会把颜文字里成对的星号误配对成斜体，一类是只含符号 / 希腊 /
+ * 假名字形的 i / em 碎片；另一类是整句被颜文字星号从中间劈碎、同层交错出现多个含汉字
+ * 的 i / em（例如 <em>片段一</em>颜文字符号<em>片段二</em>）。这两类都不套用斜体配色，
+ * 归还主要文本，让主文本渐变连续穿过；真正独立、含汉字或英文单词的斜体独白仍走斜体配置。
  */
 
 export const MODULE_NAME = 'st-colorful-text';
@@ -198,6 +199,20 @@ const SKIP_TAGS = new Set([
 const CJK_RE = /[\u3400-\u9fff\uF900-\uFAFF]/;
 /** 连续两个及以上拉丁字母视为英文单词（单字母星号碎片不算真斜体） */
 const LATIN_WORD_RE = /[A-Za-z]{2,}/;
+/** 颜文字专用字形（^ ￣ ω ≧ ∇ ＾ ・ ﾟ 等）；普通中文 / 西文标点不算颜文字 */
+const KAOMOJI_CHAR_RE = /[\^￣ω≧∇＾・ﾟДᴗ꒳ロ⊂⊃つノ´∀△▽●○★☆∠⊥ゝ]/;
+
+/**
+ * 判断一段兄弟文本是否为「颜文字符号片段」：
+ * 去掉空白后不含汉字、不含连续拉丁字母，且至少含一个颜文字专用字形。
+ * 普通标点（，。！？：；等）不含颜文字字形，不会命中。
+ */
+function isKaomojiSymbolText(text) {
+    const t = String(text || '').trim();
+    if (!t) return false;
+    if (CJK_RE.test(t) || LATIN_WORD_RE.test(t)) return false;
+    return KAOMOJI_CHAR_RE.test(t);
+}
 
 /**
  * 判断 i / em 是否为「颜文字 / 符号碎片」：
@@ -215,6 +230,30 @@ export function isKaomojiOnly(el) {
     return true;
 }
 
+/**
+ * 判断 i / em 是否为 Markdown 误配对产生的碎片（应归还主要文本），覆盖两类：
+ *  ① 元素自身只含符号 / 颜文字字形（见 isKaomojiOnly）；
+ *  ② 元素含汉字 / 英文单词，但它紧邻的前一个或后一个兄弟节点是颜文字符号片段，
+ *     且同层另有其它 i / em——原本整句应连续，被颜文字里的成对星号从中间劈成多个交错
+ *     斜体段（例如 <em>你在干什</em>(^o^)/<em>么呀</em>）。
+ * 单独出现、前后为汉字叙述的真斜体独白，即使后面跟一个颜文字也不会被命中。
+ */
+export function isMispairedByKaomoji(el) {
+    if (!el) return false;
+    if (isKaomojiOnly(el)) return true;
+    const parent = el.parentElement;
+    if (!parent) return false;
+    const siblings = [...parent.childNodes];
+    const idx = siblings.indexOf(el);
+    const nearSymbol = (node) =>
+        node && node.nodeType === Node.TEXT_NODE && isKaomojiSymbolText(node.textContent);
+    if (!nearSymbol(siblings[idx - 1]) && !nearSymbol(siblings[idx + 1])) return false;
+    const siblingItalics = [...parent.children].filter(
+        (c) => c.tagName === 'I' || c.tagName === 'EM',
+    );
+    return siblingItalics.length >= 2;
+}
+
 /** 识别文本节点所属类别：引用 > 下划线 > 斜体 > 主要；颜文字碎片不计入斜体 */
 export function categoryOf(node) {
     let el = node.parentElement;
@@ -224,7 +263,7 @@ export function categoryOf(node) {
         if (SKIP_TAGS.has(tag)) return null;
         if (tag === 'Q' || tag === 'BLOCKQUOTE') return 'quote';
         if (tag === 'U' || tag === 'INS') fallback = fallback || 'underline';
-        if ((tag === 'I' || tag === 'EM') && !isKaomojiOnly(el)) fallback = fallback || 'italic';
+        if ((tag === 'I' || tag === 'EM') && !isMispairedByKaomoji(el)) fallback = fallback || 'italic';
         el = el.parentElement;
     }
     return fallback || 'main';
@@ -311,7 +350,7 @@ function paintElement(el, cfg, catKey) {
 function paintCategoryElements(root, selector, cfg, catKey) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (catKey === 'italic' && isKaomojiOnly(el)) return;
+        if (catKey === 'italic' && isMispairedByKaomoji(el)) return;
         paintElement(el, cfg, catKey);
     });
 }
@@ -362,7 +401,7 @@ function writeChars(fragment, text, cfg, counterRef, catKey) {
 function applyElementsByLength(root, selector, catKey, cfg) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (catKey === 'italic' && isKaomojiOnly(el)) return;
+        if (catKey === 'italic' && isMispairedByKaomoji(el)) return;
         el.classList.add('stfc-tagged');
         const nodes = collectTextNodes(el).filter(
             (node) => !(node.parentElement.closest('q, blockquote') && catKey !== 'quote'),
@@ -391,7 +430,7 @@ function applyItalicSentence(root, cfg) {
 
     root.querySelectorAll('i, em').forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (isKaomojiOnly(el)) return;
+        if (isMispairedByKaomoji(el)) return;
         el.classList.add('stfc-tagged');
         // 清理历史背景渐变 / 透明填充 / 盒补偿残留，保证逐字符 color 不被覆盖
         el.style.removeProperty('color');
@@ -454,7 +493,7 @@ function restoreKaomojiToMain(el) {
 function markKaomojiFragments(root) {
     root.querySelectorAll('i, em').forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (isKaomojiOnly(el)) restoreKaomojiToMain(el);
+        if (isMispairedByKaomoji(el)) restoreKaomojiToMain(el);
     });
 }
 
@@ -519,7 +558,7 @@ function wrapBareQuotes(root, quoteCfg) {
             last = m.index + m[0].length;
         }
         if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-        node.parentNode.replaceChild(frag, node);
+        node.parentNode.replaceChild(fragment, node);
     });
 }
 
