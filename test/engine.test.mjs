@@ -435,3 +435,113 @@ test('normalizeAngle：0–360 全角度与取模', async () => {
     assert.equal(engine.normalizeAngle(720), 0);
     assert.equal(engine.normalizeAngle(''), 90);
 });
+
+/* ---------------- 颜文字碎片：Markdown 误配对的斜体归还主要文本 ---------------- */
+
+const KAOMOJI_HTML = `
+<div class="mes" id="km">
+  <div class="mes_text">
+    <p>闲聊片段 <em>_</em> 与 (<em>/ω＼</em>) 还有 <em>)</em>，真斜体 <em>这是真正的内心独白</em> 结束。</p>
+  </div>
+</div>`;
+
+function loadKaomojiDom() {
+    document.getElementById('chat').innerHTML = KAOMOJI_HTML;
+}
+
+test('isKaomojiOnly：符号碎片为真，含汉字或英文单词为假', async () => {
+    await loadEngine();
+    const holder = document.createElement('div');
+    const make = (tag, text) => {
+        const el = document.createElement(tag);
+        el.textContent = text;
+        return el;
+    };
+    assert.equal(engine.isKaomojiOnly(make('em', '_')), true);
+    assert.equal(engine.isKaomojiOnly(make('em', '/ω＼')), true);
+    assert.equal(engine.isKaomojiOnly(make('em', '＾ω＾')), true);
+    assert.equal(engine.isKaomojiOnly(make('em', ')')), true);
+    assert.equal(engine.isKaomojiOnly(make('em', '这是真正的内心独白')), false);
+    assert.equal(engine.isKaomojiOnly(make('em', 'Hello')), false);
+    assert.equal(engine.isKaomojiOnly(make('em', 'a')), true);
+    assert.equal(engine.isKaomojiOnly(holder), false);
+});
+
+test('段落渐变 + 斜体纯色：颜文字碎片不上斜体色，跟随父段主渐变', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = KAOMOJI_HTML;
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff9ec7', '#7ec8ff'], 90);
+    setMode('italic', 'solid', '#00ff00');
+    engine.processAll(document);
+
+    const text = document.querySelector('#km .mes_text');
+    const ems = [...text.querySelectorAll('em')];
+    const fragments = ems.filter((el) => el.classList.contains('stfc-kaomoji'));
+    const realItalic = ems.filter((el) => el.classList.contains('stfc-tagged') && !el.classList.contains('stfc-kaomoji'));
+
+    // 三个符号碎片被识别
+    assert.equal(fragments.length, 3);
+    fragments.forEach((el) => {
+        // 不套用斜体绿色；颜色 / 填充继承父级，无自身背景
+        assert.equal(el.style.color, 'inherit');
+        assert.equal(el.style.webkitTextFillColor, 'inherit');
+        assert.ok(!el.style.backgroundImage || el.style.backgroundImage === 'none');
+        assert.notEqual(el.style.color, 'rgb(0, 255, 0)');
+    });
+    // 真斜体独白仍套用斜体绿色
+    assert.equal(realItalic.length, 1);
+    assert.equal(realItalic[0].style.color, 'rgb(0, 255, 0)');
+    // 父段仍是主文本渐变
+    const p = text.querySelector('p');
+    assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.equal(p.style.webkitTextFillColor, 'transparent');
+});
+
+test('字符长度循环：颜文字碎片字符计入主要文本计数器，真斜体字符归入斜体', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = KAOMOJI_HTML;
+    engine.resetSettings();
+    const mainCfg = engine.getSettings().categories.main;
+    mainCfg.mode = 'gradient';
+    mainCfg.cycle = 'length';
+    mainCfg.cycleLength = 10;
+    mainCfg.gradient = ['#ff0000', '#0000ff'];
+    const italicCfg = engine.getSettings().categories.italic;
+    italicCfg.mode = 'gradient';
+    italicCfg.cycle = 'length';
+    italicCfg.gradient = ['#00ff00', '#ffff00'];
+    engine.processAll(document);
+
+    const text = document.querySelector('#km .mes_text');
+    const ems = [...text.querySelectorAll('em')];
+    const fragments = ems.filter((el) => el.classList.contains('stfc-kaomoji'));
+    // 碎片内部字符全部包成 main 字符 span，不产生 italic 字符 span
+    fragments.forEach((el) => {
+        assert.equal(el.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]').length, 0);
+        const mainChars = el.querySelectorAll('span.stfc-char[data-stfc-cat="main"]');
+        assert.ok(mainChars.length > 0, '碎片字符应随主要文本计数器逐字上色');
+    });
+    // 真斜体独白内部字符归 italic
+    const realItalic = ems.find((el) => !el.classList.contains('stfc-kaomoji'));
+    assert.ok(realItalic.querySelector('span.stfc-char[data-stfc-cat="italic"]'));
+});
+
+test('颜文字碎片幂等：重复处理后无重复标记、无嵌套字符包裹', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = KAOMOJI_HTML;
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff9ec7', '#7ec8ff'], 90);
+    setMode('italic', 'solid', '#00ff00');
+    engine.processAll(document);
+    const before = document.querySelectorAll('span.stfc-char, .stfc-kaomoji').length;
+    engine.processAll(document);
+    engine.processAll(document);
+    const after = document.querySelectorAll('span.stfc-char, .stfc-kaomoji').length;
+    assert.equal(after, before);
+    assert.equal(document.querySelectorAll('.stfc-kaomoji .stfc-kaomoji').length, 0);
+    assert.equal(document.querySelectorAll('span.stfc-char span.stfc-char').length, 0);
+});
