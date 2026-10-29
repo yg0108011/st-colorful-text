@@ -9,6 +9,10 @@
  *              （0–360° 角度生效）；斜体为避免 background-clip: text 背景盒裁掉合成
  *              倾斜伸出的笔画，改为整句逐字符按角度走向投影取色、直接写 color，不铺背景。
  *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
+ *
+ * 颜文字兼容：Markdown 会把颜文字里成对的星号误配对成斜体，生成只含符号 / 希腊 / 假名
+ * 字形的 i / em 元素；这类不含汉字与英文单词的碎片不套用斜体配色，归还主要文本，
+ * 让主文本渐变连续穿过，真正含汉字或英文单词的斜体独白仍走斜体配置。
  */
 
 export const MODULE_NAME = 'st-colorful-text';
@@ -190,7 +194,28 @@ const SKIP_TAGS = new Set([
     'TEXTAREA', 'BUTTON', 'INPUT', 'SELECT',
 ]);
 
-/** 识别文本节点所属类别：引用 > 下划线 > 斜体 > 主要 */
+/** 汉字（CJK 统一表意文字 + 扩展 A） */
+const CJK_RE = /[\u3400-\u9fff\uF900-\uFAFF]/;
+/** 连续两个及以上拉丁字母视为英文单词（单字母星号碎片不算真斜体） */
+const LATIN_WORD_RE = /[A-Za-z]{2,}/;
+
+/**
+ * 判断 i / em 是否为「颜文字 / 符号碎片」：
+ * Markdown 会把颜文字里成对出现的星号（例如星号下划线星号、斜杠 omega 反斜杠这类组合）
+ * 误配对成斜体，渲染出只含括号、符号、希腊 / 假名 / 颜文字专用字形的 i / em 元素。
+ * 这类元素不含汉字、也不含英文单词，不属于语义斜体，应归还主要文本处理，不套用斜体配色。
+ * 真正的斜体独白（含汉字或英文单词）不受影响。
+ */
+export function isKaomojiOnly(el) {
+    if (!el) return false;
+    const text = el.textContent || '';
+    if (!text.trim()) return false;
+    if (CJK_RE.test(text)) return false;
+    if (LATIN_WORD_RE.test(text)) return false;
+    return true;
+}
+
+/** 识别文本节点所属类别：引用 > 下划线 > 斜体 > 主要；颜文字碎片不计入斜体 */
 export function categoryOf(node) {
     let el = node.parentElement;
     let fallback = null;
@@ -199,7 +224,7 @@ export function categoryOf(node) {
         if (SKIP_TAGS.has(tag)) return null;
         if (tag === 'Q' || tag === 'BLOCKQUOTE') return 'quote';
         if (tag === 'U' || tag === 'INS') fallback = fallback || 'underline';
-        if (tag === 'I' || tag === 'EM') fallback = fallback || 'italic';
+        if ((tag === 'I' || tag === 'EM') && !isKaomojiOnly(el)) fallback = fallback || 'italic';
         el = el.parentElement;
     }
     return fallback || 'main';
@@ -282,10 +307,11 @@ function paintElement(el, cfg, catKey) {
     el.style.webkitTextFillColor = 'currentColor';
 }
 
-/** CSS 方案：处理特殊元素类别（斜体 / 下划线 / 引用容器），本元素一把渐变 */
+/** CSS 方案：处理特殊元素类别（斜体 / 下划线 / 引用容器），本元素一把渐变；斜体跳过颜文字碎片 */
 function paintCategoryElements(root, selector, cfg, catKey) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
+        if (catKey === 'italic' && isKaomojiOnly(el)) return;
         paintElement(el, cfg, catKey);
     });
 }
@@ -332,10 +358,11 @@ function writeChars(fragment, text, cfg, counterRef, catKey) {
     }
 }
 
-/** length 方案：斜体 / 下划线 / 引用元素内部连续计数，逐字符上色 */
+/** length 方案：斜体 / 下划线 / 引用元素内部连续计数，逐字符上色；斜体跳过颜文字碎片 */
 function applyElementsByLength(root, selector, catKey, cfg) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
+        if (catKey === 'italic' && isKaomojiOnly(el)) return;
         el.classList.add('stfc-tagged');
         const nodes = collectTextNodes(el).filter(
             (node) => !(node.parentElement.closest('q, blockquote') && catKey !== 'quote'),
@@ -364,6 +391,7 @@ function applyItalicSentence(root, cfg) {
 
     root.querySelectorAll('i, em').forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
+        if (isKaomojiOnly(el)) return;
         el.classList.add('stfc-tagged');
         // 清理历史背景渐变 / 透明填充 / 盒补偿残留，保证逐字符 color 不被覆盖
         el.style.removeProperty('color');
@@ -395,6 +423,38 @@ function applyItalicSentence(root, cfg) {
             }
             node.parentNode.replaceChild(fragment, node);
         });
+    });
+}
+
+/* -------------------------------------------------------------------------- */
+/* 颜文字碎片：Markdown 误配对产生的 <i>/<em> 归还主要文本                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 把颜文字碎片 <i>/<em> 重置为跟随父级主要文本：
+ * 清除斜体分支可能写入的背景 / 填充 / 颜色，颜色与填充一律 inherit 父级，
+ * 让父段主文本渐变（background-clip: text）连续穿过碎片；字形倾斜保持不动。
+ */
+function restoreKaomojiToMain(el) {
+    el.classList.add('stfc-kaomoji');
+    el.style.removeProperty('color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('-webkit-background-clip');
+    el.style.removeProperty('background-clip');
+    el.style.removeProperty('-webkit-text-fill-color');
+    el.style.removeProperty('padding');
+    el.style.removeProperty('margin');
+    el.style.removeProperty('background-origin');
+    el.style.color = 'inherit';
+    el.style.webkitTextFillColor = 'inherit';
+    el.style.backgroundImage = 'none';
+}
+
+/** 扫描所有 i/em，颜文字碎片标记并归还主要文本；真斜体留给后续斜体分支处理 */
+function markKaomojiFragments(root) {
+    root.querySelectorAll('i, em').forEach((el) => {
+        if (el.closest('.mes_reasoning')) return;
+        if (isKaomojiOnly(el)) restoreKaomojiToMain(el);
     });
 }
 
@@ -521,6 +581,18 @@ export function resetRoot(root) {
         el.style.removeProperty('margin');
         el.style.removeProperty('background-origin');
     });
+    // 颜文字碎片标记：移除 class 与继承样式，回到未染色状态
+    root.querySelectorAll('.stfc-kaomoji').forEach((el) => {
+        el.classList.remove('stfc-kaomoji');
+        el.style.removeProperty('color');
+        el.style.removeProperty('background-image');
+        el.style.removeProperty('-webkit-background-clip');
+        el.style.removeProperty('background-clip');
+        el.style.removeProperty('-webkit-text-fill-color');
+        el.style.removeProperty('padding');
+        el.style.removeProperty('margin');
+        el.style.removeProperty('background-origin');
+    });
 }
 
 /** 对任意文本根节点应用配色（聊天消息与面板预览共用同一引擎） */
@@ -528,6 +600,8 @@ export function applyToRoot(root) {
     resetRoot(root);
     if (!state.settings.enabled) return;
     const cats = state.settings.categories;
+    // 先把颜文字碎片 <i>/<em> 归还主要文本，避免被斜体分支误染色
+    markKaomojiFragments(root);
     applyCategory(root, 'i, em', 'italic', cats.italic);
     applyCategory(root, 'u, ins', 'underline', cats.underline);
     applyCategory(root, 'q, blockquote', 'quote', cats.quote);
@@ -584,7 +658,7 @@ function hasCustomColor() {
  */
 function needsRepaint(textEl) {
     if (!state.settings.enabled || !hasCustomColor()) return false;
-    return !textEl.querySelector('.stfc-tagged, .stfc-char, .stfc-quote-wrap');
+    return !textEl.querySelector('.stfc-tagged, .stfc-char, .stfc-quote-wrap, .stfc-kaomoji');
 }
 
 /** 处理单条消息：设置、文本均未变化且染色产物仍在则跳过；产物被外部清空时强制重染 */
