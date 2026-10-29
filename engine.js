@@ -558,7 +558,7 @@ function wrapBareQuotes(root, quoteCfg) {
             last = m.index + m[0].length;
         }
         if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-        node.parentNode.replaceChild(fragment, node);
+        node.parentNode.replaceChild(frag, node);
     });
 }
 
