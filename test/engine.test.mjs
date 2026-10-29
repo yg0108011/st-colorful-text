@@ -545,3 +545,123 @@ test('颜文字碎片幂等：重复处理后无重复标记、无嵌套字符�
     assert.equal(document.querySelectorAll('.stfc-kaomoji .stfc-kaomoji').length, 0);
     assert.equal(document.querySelectorAll('span.stfc-char span.stfc-char').length, 0);
 });
+
+/* ---------------- 被颜文字星号从中间劈碎的含汉字交错 em ---------------- */
+
+// 现场形态：整句被颜文字里的成对星号劈成两段含汉字 em，中间夹颜文字符号
+const SPLIT_HTML = `
+<div class="mes" id="sp">
+  <div class="mes_text">
+    <p><em>你在干什</em>(^o^)/<em>么呀</em></p>
+  </div>
+</div>`;
+
+// 对照组：单个真斜体独白，前后为汉字叙述，句尾带一个颜文字符号；不允许被误判为碎片
+const REAL_SINGLE_HTML = `
+<div class="mes" id="rs">
+  <div class="mes_text">
+    <p>她轻轻开口 <em>这是真正的内心独白</em>，说完笑了 (^_^)。</p>
+  </div>
+</div>`;
+
+test('isMispairedByKaomoji：交错含汉字 em 命中，独立真斜体不命中', async () => {
+    await loadEngine();
+    document.getElementById('chat').innerHTML = SPLIT_HTML;
+    const splitEms = [...document.querySelectorAll('#sp em')];
+    assert.equal(engine.isMispairedByKaomoji(splitEms[0]), true);
+    assert.equal(engine.isMispairedByKaomoji(splitEms[1]), true);
+
+    document.getElementById('chat').innerHTML = REAL_SINGLE_HTML;
+    const real = document.querySelector('#rs em');
+    assert.equal(engine.isMispairedByKaomoji(real), false);
+
+    // 纯符号碎片仍然命中
+    const make = (tag, text) => {
+        const el = document.createElement(tag);
+        el.textContent = text;
+        return el;
+    };
+    assert.equal(engine.isMispairedByKaomoji(make('em', '_')), true);
+});
+
+test('被劈碎的交错 em：段落渐变下归还父段主渐变，不上斜体色', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = SPLIT_HTML;
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff9ec7', '#7ec8ff'], 90);
+    setMode('italic', 'solid', '#00ff00');
+    engine.processAll(document);
+
+    const text = document.querySelector('#sp .mes_text');
+    const ems = [...text.querySelectorAll('em')];
+    assert.equal(ems.length, 2);
+    ems.forEach((el) => {
+        assert.ok(el.classList.contains('stfc-kaomoji'));
+        assert.equal(el.style.color, 'inherit');
+        assert.equal(el.style.webkitTextFillColor, 'inherit');
+        assert.ok(!el.style.backgroundImage || el.style.backgroundImage === 'none');
+        assert.notEqual(el.style.color, 'rgb(0, 255, 0)');
+    });
+    const p = text.querySelector('p');
+    assert.ok(p.style.backgroundImage.includes('linear-gradient(90deg'));
+    assert.equal(p.style.webkitTextFillColor, 'transparent');
+});
+
+test('被劈碎的交错 em：字符长度循环下字符并入主要文本计数器', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = SPLIT_HTML;
+    engine.resetSettings();
+    const mainCfg = engine.getSettings().categories.main;
+    mainCfg.mode = 'gradient';
+    mainCfg.cycle = 'length';
+    mainCfg.cycleLength = 10;
+    mainCfg.gradient = ['#ff0000', '#0000ff'];
+    const italicCfg = engine.getSettings().categories.italic;
+    italicCfg.mode = 'gradient';
+    italicCfg.cycle = 'length';
+    italicCfg.gradient = ['#00ff00', '#ffff00'];
+    engine.processAll(document);
+
+    const text = document.querySelector('#sp .mes_text');
+    text.querySelectorAll('em').forEach((el) => {
+        assert.ok(el.classList.contains('stfc-kaomoji'));
+        assert.equal(el.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]').length, 0);
+        assert.ok(el.querySelectorAll('span.stfc-char[data-stfc-cat="main"]').length > 0);
+    });
+});
+
+test('独立真斜体后跟颜文字符号：不被误判碎片，照常走斜体配色', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = REAL_SINGLE_HTML;
+    engine.resetSettings();
+    setMode('main', 'theme');
+    setMode('italic', 'gradient', null, ['#00ff00', '#ffff00'], 90);
+    engine.processAll(document);
+
+    const text = document.querySelector('#rs .mes_text');
+    const em = text.querySelector('em');
+    assert.ok(!em.classList.contains('stfc-kaomoji'));
+    const chars = em.querySelectorAll('span.stfc-char[data-stfc-cat="italic"]');
+    assert.ok(chars.length > 0);
+    assert.equal(chars[0].style.color, 'rgb(0, 255, 0)');
+});
+
+test('交错 em 碎片幂等：重复处理无重复标记、无嵌套字符包裹', async () => {
+    await loadEngine();
+    resetChat();
+    document.getElementById('chat').innerHTML = SPLIT_HTML;
+    engine.resetSettings();
+    setMode('main', 'gradient', null, ['#ff9ec7', '#7ec8ff'], 90);
+    setMode('italic', 'solid', '#00ff00');
+    engine.processAll(document);
+    const before = document.querySelectorAll('span.stfc-char, .stfc-kaomoji').length;
+    engine.processAll(document);
+    engine.processAll(document);
+    const after = document.querySelectorAll('span.stfc-char, .stfc-kaomoji').length;
+    assert.equal(after, before);
+    assert.equal(document.querySelectorAll('.stfc-kaomoji .stfc-kaomoji').length, 0);
+    assert.equal(document.querySelectorAll('span.stfc-char span.stfc-char').length, 0);
+});
