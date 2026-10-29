@@ -10,14 +10,9 @@
  *              倾斜伸出的笔画，改为整句逐字符按角度走向投影取色、直接写 color，不铺背景。
  *     length    字符长度：每 cycleLength 个字走完一遍色标，逐字符插值上色。
  *
- * 颜文字兼容：Markdown 会把颜文字里出现的星号误配对成斜体，共三类碎片：
- *   ① 只含符号 / 希腊 / 假名字形的 i / em；
- *   ② 整句被颜文字星号从中间劈碎、同层交错出现多个含汉字的 i / em
- *      （例如 <em>片段一</em>颜文字符号<em>片段二</em>）；
- *   ③ 单段 i / em 与紧邻兄弟文本本是同一个被颜文字切开的整体
- *      （例如 <em>你在干什 ゞ(≧▽≦</em>)ゞ么呀*）。
- * 命中后直接拆壳、把文本归还主要文本流，让主文本渐变连续穿过；真正独立、含汉字或
- * 英文单词的斜体独白仍走斜体配置。
+ * 颜文字兼容：Markdown 会把颜文字里成对的星号误配对成斜体，生成只含符号 / 希腊 / 假名
+ * 字形的 i / em 元素；这类不含汉字与英文单词的碎片不套用斜体配色，归还主要文本，
+ * 让主文本渐变连续穿过，真正含汉字或英文单词的斜体独白仍走斜体配置。
  */
 
 export const MODULE_NAME = 'st-colorful-text';
@@ -203,42 +198,6 @@ const SKIP_TAGS = new Set([
 const CJK_RE = /[\u3400-\u9fff\uF900-\uFAFF]/;
 /** 连续两个及以上拉丁字母视为英文单词（单字母星号碎片不算真斜体） */
 const LATIN_WORD_RE = /[A-Za-z]{2,}/;
-/** 颜文字专用字形（^ ￣ ω ≧ ≦ ∇ ＾ ・ ﾟ 等）；普通中文 / 西文标点不算颜文字 */
-const KAOMOJI_CHAR_RE = /[\^￣ω≧≦∇＾・ﾟДᴗ꒳ロ⊂⊃つノ´∀△▽●○★☆∠⊥ゝ]/;
-/** 颜文字括号接缝符号（半 / 全角圆括号） */
-const KAOMOJI_JOIN_RE = /[()（）]/;
-/** 颜文字闭合 / 收尾符号：兄弟文本以它开头，说明颜文字前一半被切进了标签里 */
-const KAOMOJI_CLOSE_HEAD_RE = /^[)）ゞつノ´ゝ⊃∀▽≦ω￣＾^・ﾟ]/;
-/** 颜文字开放 / 起始符号：兄弟文本以它收尾，说明颜文字后一半被切进了标签里 */
-const KAOMOJI_OPEN_TAIL_RE = /[(（^￣ゞ⊂∇≧ω＾・ﾟ]$/;
-
-/**
- * 判断一段兄弟文本是否为「颜文字符号片段」：
- * 去掉空白后不含汉字、不含连续拉丁字母，且至少含一个颜文字专用字形。
- * 普通标点（，。！？：；等）不含颜文字字形，不会命中。
- */
-function isKaomojiSymbolText(text) {
-    const t = String(text || '').trim();
-    if (!t) return false;
-    if (CJK_RE.test(t) || LATIN_WORD_RE.test(t)) return false;
-    return KAOMOJI_CHAR_RE.test(t);
-}
-
-/** 文本末尾是否停在颜文字专用字形或括号上（没说完就被星号切断） */
-function endsWithKaomojiSide(text) {
-    const t = String(text || '').trimEnd();
-    if (!t) return false;
-    const last = t.slice(-1);
-    return KAOMOJI_CHAR_RE.test(last) || KAOMOJI_JOIN_RE.test(last);
-}
-
-/** 文本开头是否落在颜文字专用字形或括号上 */
-function startsWithKaomojiSide(text) {
-    const t = String(text || '').trimStart();
-    if (!t) return false;
-    const first = t.slice(0, 1);
-    return KAOMOJI_CHAR_RE.test(first) || KAOMOJI_JOIN_RE.test(first);
-}
 
 /**
  * 判断 i / em 是否为「颜文字 / 符号碎片」：
@@ -256,52 +215,6 @@ export function isKaomojiOnly(el) {
     return true;
 }
 
-/**
- * 判断 i / em 是否为 Markdown 误配对产生的碎片（应归还主要文本），覆盖三类：
- *  ① 元素自身只含符号 / 颜文字字形（见 isKaomojiOnly）；
- *  ② 元素含汉字 / 英文单词，但紧邻的前一个或后一个兄弟节点是纯颜文字符号片段，
- *     且同层另有其它 i / em——原本整句应连续，被颜文字里的成对星号从中间劈成多个
- *     交错斜体段（例如 <em>你在干什</em>(^o^)/<em>么呀</em>）；
- *  ③ 单段 i / em 与紧邻兄弟文本本是同一个被颜文字从中间切开的整体：标签停在颜文字
- *     开放侧、兄弟以闭合符号开头（或对称反向），两半各自都可能含汉字，例如
- *     <em>你在干什 ゞ(≧▽≦</em>)ゞ么呀*。
- * 单独出现、前后为汉字叙述的真斜体独白，即使后面跟一个颜文字也不会被命中。
- */
-export function isMispairedByKaomoji(el) {
-    if (!el) return false;
-    if (isKaomojiOnly(el)) return true;
-    const parent = el.parentElement;
-    if (!parent) return false;
-    const siblings = [...parent.childNodes];
-    const idx = siblings.indexOf(el);
-    const prev = siblings[idx - 1];
-    const next = siblings[idx + 1];
-
-    // 形态 ②：紧邻兄弟是纯颜文字符号片段，且同层另有其它 i / em（多段交错）
-    const nearSymbol = (node) =>
-        node && node.nodeType === Node.TEXT_NODE && isKaomojiSymbolText(node.textContent);
-    if (nearSymbol(prev) || nearSymbol(next)) {
-        const siblingItalics = [...parent.children].filter(
-            (c) => c.tagName === 'I' || c.tagName === 'EM',
-        );
-        if (siblingItalics.length >= 2) return true;
-    }
-
-    // 形态 ③：单段标签与兄弟文本拼成被劈开的颜文字（标签内前半 + 兄弟后半）
-    if (next && next.nodeType === Node.TEXT_NODE
-        && endsWithKaomojiSide(el.textContent)
-        && KAOMOJI_CLOSE_HEAD_RE.test(String(next.textContent).trimStart())) {
-        return true;
-    }
-    // 对称：兄弟前半 + 标签内后半
-    if (prev && prev.nodeType === Node.TEXT_NODE
-        && startsWithKaomojiSide(el.textContent)
-        && KAOMOJI_OPEN_TAIL_RE.test(String(prev.textContent).trimEnd())) {
-        return true;
-    }
-    return false;
-}
-
 /** 识别文本节点所属类别：引用 > 下划线 > 斜体 > 主要；颜文字碎片不计入斜体 */
 export function categoryOf(node) {
     let el = node.parentElement;
@@ -311,7 +224,7 @@ export function categoryOf(node) {
         if (SKIP_TAGS.has(tag)) return null;
         if (tag === 'Q' || tag === 'BLOCKQUOTE') return 'quote';
         if (tag === 'U' || tag === 'INS') fallback = fallback || 'underline';
-        if ((tag === 'I' || tag === 'EM') && !isMispairedByKaomoji(el)) fallback = fallback || 'italic';
+        if ((tag === 'I' || tag === 'EM') && !isKaomojiOnly(el)) fallback = fallback || 'italic';
         el = el.parentElement;
     }
     return fallback || 'main';
@@ -398,7 +311,7 @@ function paintElement(el, cfg, catKey) {
 function paintCategoryElements(root, selector, cfg, catKey) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (catKey === 'italic' && isMispairedByKaomoji(el)) return;
+        if (catKey === 'italic' && isKaomojiOnly(el)) return;
         paintElement(el, cfg, catKey);
     });
 }
@@ -449,7 +362,7 @@ function writeChars(fragment, text, cfg, counterRef, catKey) {
 function applyElementsByLength(root, selector, catKey, cfg) {
     root.querySelectorAll(selector).forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (catKey === 'italic' && isMispairedByKaomoji(el)) return;
+        if (catKey === 'italic' && isKaomojiOnly(el)) return;
         el.classList.add('stfc-tagged');
         const nodes = collectTextNodes(el).filter(
             (node) => !(node.parentElement.closest('q, blockquote') && catKey !== 'quote'),
@@ -478,7 +391,7 @@ function applyItalicSentence(root, cfg) {
 
     root.querySelectorAll('i, em').forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (isMispairedByKaomoji(el)) return;
+        if (isKaomojiOnly(el)) return;
         el.classList.add('stfc-tagged');
         // 清理历史背景渐变 / 透明填充 / 盒补偿残留，保证逐字符 color 不被覆盖
         el.style.removeProperty('color');
@@ -514,33 +427,34 @@ function applyItalicSentence(root, cfg) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 颜文字碎片：Markdown 误配对产生的 <i>/<em> 拆壳归还主要文本流                  */
+/* 颜文字碎片：Markdown 误配对产生的 <i>/<em> 归还主要文本                        */
 /* -------------------------------------------------------------------------- */
 
 /**
- * 拆壳：移除 Markdown 误配对产生的 i/em 外壳，把内部文本节点并回父节点的普通文本流。
- * 段落 CSS 渐变铺在父段（p）上，文本回到直接文本流后即可与前后文字共享同一条
- * background-clip: text 渐变、连续穿过；避免子元素 inherit 时父段背景透不出、
- * 碎片文字透明发白。length 循环下这些文本节点也会直接进入主要文本计数器。
+ * 把颜文字碎片 <i>/<em> 重置为跟随父级主要文本：
+ * 清除斜体分支可能写入的背景 / 填充 / 颜色，颜色与填充一律 inherit 父级，
+ * 让父段主文本渐变（background-clip: text）连续穿过碎片；字形倾斜保持不动。
  */
-function unwrapMispaired(el) {
-    const parent = el.parentNode;
-    if (!parent) return;
-    const ref = el.nextSibling;
-    while (el.firstChild) parent.insertBefore(el.firstChild, ref);
-    parent.removeChild(el);
+function restoreKaomojiToMain(el) {
+    el.classList.add('stfc-kaomoji');
+    el.style.removeProperty('color');
+    el.style.removeProperty('background-image');
+    el.style.removeProperty('-webkit-background-clip');
+    el.style.removeProperty('background-clip');
+    el.style.removeProperty('-webkit-text-fill-color');
+    el.style.removeProperty('padding');
+    el.style.removeProperty('margin');
+    el.style.removeProperty('background-origin');
+    el.style.color = 'inherit';
+    el.style.webkitTextFillColor = 'inherit';
+    el.style.backgroundImage = 'none';
 }
 
-/** 扫描所有 i/em，误配对碎片拆壳归还主要文本；真斜体留给后续斜体分支处理。
- *  先在原始 DOM 上统一判定收集，再逐片拆壳，避免拆壳顺序改变兄弟结构导致后续碎片漏判。 */
+/** 扫描所有 i/em，颜文字碎片标记并归还主要文本；真斜体留给后续斜体分支处理 */
 function markKaomojiFragments(root) {
-    const fragments = [];
     root.querySelectorAll('i, em').forEach((el) => {
         if (el.closest('.mes_reasoning')) return;
-        if (isMispairedByKaomoji(el)) fragments.push(el);
-    });
-    fragments.forEach((el) => {
-        if (el.isConnected) unwrapMispaired(el);
+        if (isKaomojiOnly(el)) restoreKaomojiToMain(el);
     });
 }
 
